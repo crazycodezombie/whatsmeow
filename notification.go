@@ -236,16 +236,16 @@ func (cli *Client) handleNotification(node *waBinary.Node) {
 	if !ag.OK() {
 		return
 	}
-	go cli.sendAck(node)
+	defer cli.sendAck(node)
 	switch notifType {
 	case "encrypt":
-		go cli.handleEncryptNotification(node)
+		cli.handleEncryptNotification(node)
 	case "server_sync":
-		go cli.handleAppStateNotification(node)
+		cli.handleAppStateNotification(node)
 	case "account_sync":
-		go cli.handleAccountSyncNotification(node)
+		cli.handleAccountSyncNotification(node)
 	case "devices":
-		go cli.handleDeviceNotification(node)
+		cli.handleDeviceNotification(node)
 	case "w:gp2":
 		evt, err := cli.parseGroupNotification(node)
 		if err != nil {
@@ -254,11 +254,11 @@ func (cli *Client) handleNotification(node *waBinary.Node) {
 			go cli.dispatchEvent(evt)
 		}
 	case "picture":
-		go cli.handlePictureNotification(node)
+		cli.handlePictureNotification(node)
 	case "mediaretry":
-		go cli.handleMediaRetryNotification(node)
+		cli.handleMediaRetryNotification(node)
 	case "privacy_token":
-		go cli.handlePrivacyTokenNotification(node)
+		cli.handlePrivacyTokenNotification(node)
 	// Other types: business, disappearing_mode, server, status, pay, psa
 	default:
 		cli.Log.Debugf("Unhandled notification with type %s", notifType)
