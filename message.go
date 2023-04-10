@@ -39,13 +39,13 @@ func (cli *Client) handleEncryptedMessage(node *waBinary.Node) {
 	if err != nil {
 		cli.Log.Warnf("Failed to parse message: %v", err)
 	} else {
+		defer cli.sendAck(node)
 		if info.VerifiedName != nil && len(info.VerifiedName.Details.GetVerifiedName()) > 0 {
-			go cli.updateBusinessName(info.Sender, info, info.VerifiedName.Details.GetVerifiedName())
+			cli.updateBusinessName(info.Sender, info, info.VerifiedName.Details.GetVerifiedName())
 		}
 		if len(info.PushName) > 0 && info.PushName != "-" {
-			go cli.updatePushName(info.Sender, info, info.PushName)
+			cli.updatePushName(info.Sender, info, info.PushName)
 		}
-		go cli.sendAck(node)
 		if info.Sender.Server == types.NewsletterServer {
 			cli.handlePlaintextMessage(info, node)
 		} else {
@@ -344,7 +344,7 @@ func (cli *Client) handleHistorySyncNotificationLoop() {
 		// and the atomic variable being updated. If yes, restart the loop.
 		if len(cli.historySyncNotifications) > 0 && atomic.CompareAndSwapUint32(&cli.historySyncHandlerStarted, 0, 1) {
 			cli.Log.Warnf("New history sync notifications appeared after loop stopped, restarting loop...")
-			go cli.handleHistorySyncNotificationLoop()
+			cli.handleHistorySyncNotificationLoop()
 		}
 	}()
 	for notif := range cli.historySyncNotifications {
@@ -365,9 +365,9 @@ func (cli *Client) handleHistorySyncNotification(notif *waProto.HistorySyncNotif
 	} else {
 		cli.Log.Debugf("Received history sync (type %s, chunk %d)", historySync.GetSyncType(), historySync.GetChunkOrder())
 		if historySync.GetSyncType() == waProto.HistorySync_PUSH_NAME {
-			go cli.handleHistoricalPushNames(historySync.GetPushnames())
+			cli.handleHistoricalPushNames(historySync.GetPushnames())
 		} else if len(historySync.GetConversations()) > 0 {
-			go cli.storeHistoricalMessageSecrets(historySync.GetConversations())
+			cli.storeHistoricalMessageSecrets(historySync.GetConversations())
 		}
 		cli.dispatchEvent(&events.HistorySync{
 			Data: &historySync,
