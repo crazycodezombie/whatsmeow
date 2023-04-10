@@ -22,16 +22,14 @@ func (cli *Client) handleReceipt(node *waBinary.Node) {
 		cli.Log.Warnf("Failed to parse receipt: %v", err)
 	} else if receipt != nil {
 		if receipt.Type == types.ReceiptTypeRetry {
-			go func() {
-				err := cli.handleRetryReceipt(receipt, node)
-				if err != nil {
-					cli.Log.Errorf("Failed to handle retry receipt for %s/%s from %s: %v", receipt.Chat, receipt.MessageIDs[0], receipt.Sender, err)
-				}
-			}()
+			err := cli.handleRetryReceipt(receipt, node)
+			if err != nil {
+				cli.Log.Errorf("Failed to handle retry receipt for %s/%s from %s: %v", receipt.Chat, receipt.MessageIDs[0], receipt.Sender, err)
+			}
 		}
-		go cli.dispatchEvent(receipt)
+		cli.dispatchEvent(receipt)
 	}
-	go cli.sendAck(node)
+	cli.sendAck(node)
 }
 
 func (cli *Client) handleGroupedReceipt(partialReceipt events.Receipt, participants *waBinary.Node) {
