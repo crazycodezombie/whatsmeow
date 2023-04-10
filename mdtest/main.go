@@ -855,5 +855,7 @@ func handler(rawEvt interface{}) {
 		log.Debugf("Keepalive timeout event: %+v", evt)
 	case *events.KeepAliveRestored:
 		log.Debugf("Keepalive restored")
+	case *events.OfflineSyncCompleted:
+		log.Infof("sync completed")
 	}
 }
