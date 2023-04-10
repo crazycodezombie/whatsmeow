@@ -855,5 +855,7 @@ func handler(rawEvt interface{}) {
 		}
 	case *events.KeepAliveRestored:
 		log.Debugf("Keepalive restored")
+	case *events.OfflineSyncCompleted:
+		log.Infof("sync completed")
 	}
 }

@@ -113,26 +113,24 @@ func (cli *Client) handleConnectSuccess(node *waBinary.Node) {
 	cli.LastSuccessfulConnect = time.Now()
 	cli.AutoReconnectErrors = 0
 	atomic.StoreUint32(&cli.isLoggedIn, 1)
-	go func() {
-		if dbCount, err := cli.Store.PreKeys.UploadedPreKeyCount(); err != nil {
-			cli.Log.Errorf("Failed to get number of prekeys in database: %v", err)
-		} else if serverCount, err := cli.getServerPreKeyCount(); err != nil {
-			cli.Log.Warnf("Failed to get number of prekeys on server: %v", err)
-		} else {
-			cli.Log.Debugf("Database has %d prekeys, server says we have %d", dbCount, serverCount)
-			if serverCount < MinPreKeyCount || dbCount < MinPreKeyCount {
-				cli.uploadPreKeys()
-				sc, _ := cli.getServerPreKeyCount()
-				cli.Log.Debugf("Prekey count after upload: %d", sc)
-			}
+	if dbCount, err := cli.Store.PreKeys.UploadedPreKeyCount(); err != nil {
+		cli.Log.Errorf("Failed to get number of prekeys in database: %v", err)
+	} else if serverCount, err := cli.getServerPreKeyCount(); err != nil {
+		cli.Log.Warnf("Failed to get number of prekeys on server: %v", err)
+	} else {
+		cli.Log.Debugf("Database has %d prekeys, server says we have %d", dbCount, serverCount)
+		if serverCount < MinPreKeyCount || dbCount < MinPreKeyCount {
+			cli.uploadPreKeys()
+			sc, _ := cli.getServerPreKeyCount()
+			cli.Log.Debugf("Prekey count after upload: %d", sc)
 		}
-		err := cli.SetPassive(false)
-		if err != nil {
-			cli.Log.Warnf("Failed to send post-connect passive IQ: %v", err)
-		}
-		cli.dispatchEvent(&events.Connected{})
-		cli.closeSocketWaitChan()
-	}()
+	}
+	err := cli.SetPassive(false)
+	if err != nil {
+		cli.Log.Warnf("Failed to send post-connect passive IQ: %v", err)
+	}
+	cli.dispatchEvent(&events.Connected{})
+	cli.closeSocketWaitChan()
 }
 
 // SetPassive tells the WhatsApp server whether this device is passive or not.
