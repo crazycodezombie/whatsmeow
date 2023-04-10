@@ -915,5 +915,7 @@ func handler(rawEvt interface{}) {
 		log.Debugf("Keepalive restored")
 	case *events.Blocklist:
 		log.Infof("Blocklist event: %+v", evt)
+	case *events.OfflineSyncCompleted:
+		log.Infof("sync completed")
 	}
 }
