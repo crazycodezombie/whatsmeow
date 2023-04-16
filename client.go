@@ -139,7 +139,7 @@ type Client struct {
 
 // Size of buffer for the channel that all incoming XML nodes go through.
 // In general it shouldn't go past a few buffered messages, but the channel is big to be safe.
-const handlerQueueSize = 2048
+const handlerQueueSize = 65536
 
 // NewClient initializes a new WhatsApp web client.
 //
