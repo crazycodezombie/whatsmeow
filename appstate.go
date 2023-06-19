@@ -25,6 +25,8 @@ import (
 // cached state will be removed and all app state patches will be re-fetched from the server.
 func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
 	cli.appStateSyncLock.Lock()
+	cli.Log.Infof("starting fetch %v app state", name)
+	defer func() { cli.Log.Infof("done fetch %v app state", name) }()
 	defer cli.appStateSyncLock.Unlock()
 	if fullSync {
 		err := cli.Store.AppState.DeleteAppStateVersion(string(name))
