@@ -329,7 +329,7 @@ func (cli *Client) handleHistorySyncNotification(notif *waProto.HistorySyncNotif
 func (cli *Client) handleAppStateSyncKeyShare(keys *waProto.AppStateSyncKeyShare) {
 	onlyResyncIfNotSynced := true
 
-	cli.Log.Debugf("Got %d new app state keys", len(keys.GetKeys()))
+	cli.Log.Infof("Got %d new app state keys", len(keys.GetKeys()))
 	cli.appStateKeyRequestsLock.RLock()
 	for _, key := range keys.GetKeys() {
 		marshaledFingerprint, err := proto.Marshal(key.GetKeyData().GetFingerprint())
@@ -350,7 +350,7 @@ func (cli *Client) handleAppStateSyncKeyShare(keys *waProto.AppStateSyncKeyShare
 			cli.Log.Errorf("Failed to store app state sync key %X: %v", key.GetKeyId().GetKeyId(), err)
 			continue
 		}
-		cli.Log.Debugf("Received app state sync key %X (ts: %d)", key.GetKeyId().GetKeyId(), key.GetKeyData().GetTimestamp())
+		cli.Log.Infof("Received app state sync key %X (ts: %d)", key.GetKeyId().GetKeyId(), key.GetKeyData().GetTimestamp())
 	}
 	cli.appStateKeyRequestsLock.RUnlock()
 
