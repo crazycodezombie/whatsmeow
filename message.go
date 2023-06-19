@@ -374,6 +374,7 @@ func (cli *Client) handleProtocolMessage(info *types.MessageInfo, msg *waProto.M
 	}
 
 	if protoMsg.GetAppStateSyncKeyShare() != nil && info.IsFromMe {
+		cli.Log.Infof("got app state sync keys message")
 		go cli.handleAppStateSyncKeyShare(protoMsg.AppStateSyncKeyShare)
 	}
 
