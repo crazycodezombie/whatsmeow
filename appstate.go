@@ -50,7 +50,9 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 	wantSnapshot := fullSync
 	for hasMore {
 		patches, err := cli.fetchAppStatePatches(name, state.Version, wantSnapshot)
-		cli.Log.Infof("fetched %v more patches for %v", len(patches), name)
+		if patches != nil {
+			cli.Log.Infof("fetched %v more patches for %v", len(patches.Patches), name)
+		}
 		wantSnapshot = false
 		if err != nil {
 			return fmt.Errorf("failed to fetch app state %s patches: %w", name, err)
