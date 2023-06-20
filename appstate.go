@@ -50,12 +50,14 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 	wantSnapshot := fullSync
 	for hasMore {
 		patches, err := cli.fetchAppStatePatches(name, state.Version, wantSnapshot)
+		cli.Log.Infof("fetched %v more patches for %v", len(patches), name)
 		wantSnapshot = false
 		if err != nil {
 			return fmt.Errorf("failed to fetch app state %s patches: %w", name, err)
 		}
 		hasMore = patches.HasMorePatches
 
+		cli.Log.Infof("start decoding patches %v", name)
 		mutations, newState, err := cli.appStateProc.DecodePatches(patches, state, true)
 		if err != nil {
 			if errors.Is(err, appstate.ErrKeyNotFound) {
@@ -63,9 +65,11 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 			}
 			return fmt.Errorf("failed to decode app state %s patches: %w", name, err)
 		}
+		cli.Log.Infof("done decoding patches %v", name)
 		wasFullSync := state.Version == 0 && patches.Snapshot != nil
 		state = newState
 		if name == appstate.WAPatchCriticalUnblockLow && wasFullSync && !cli.EmitAppStateEventsOnFullSync {
+			cli.Log.Infof("start storing contacts %v", name)
 			var contacts []store.ContactEntry
 			mutations, contacts = cli.filterContacts(mutations)
 			cli.Log.Debugf("Mass inserting app state snapshot with %d contacts into the store", len(contacts))
@@ -74,7 +78,9 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 				// This is a fairly serious failure, so just abort the whole thing
 				return fmt.Errorf("failed to update contact store with data from snapshot: %v", err)
 			}
+			cli.Log.Infof("done storing contacts %v", name)
 		}
+		cli.Log.Infof("dispatching %v mutations for %v", len(mutations), name)
 		for _, mutation := range mutations {
 			cli.dispatchAppState(mutation, fullSync, cli.EmitAppStateEventsOnFullSync)
 		}

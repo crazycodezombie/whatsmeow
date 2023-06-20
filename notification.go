@@ -52,7 +52,7 @@ func (cli *Client) handleAppStateNotification(node *waBinary.Node) {
 		ag := collection.AttrGetter()
 		name := appstate.WAPatchName(ag.String("name"))
 		version := ag.Uint64("version")
-		cli.Log.Debugf("Got server sync notification that app state %s has updated to version %d", name, version)
+		cli.Log.Infof("Got server sync notification that app state %s has updated to version %d", name, version)
 		err := cli.FetchAppState(name, false, false)
 		if errors.Is(err, ErrIQDisconnected) || errors.Is(err, ErrNotConnected) {
 			// There are some app state changes right before a remote logout, so stop syncing if we're disconnected.
