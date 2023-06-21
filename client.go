@@ -65,6 +65,8 @@ type Client struct {
 	// even when re-syncing the whole state.
 	EmitAppStateEventsOnFullSync bool
 
+	StoreContacts bool
+
 	appStateProc     *appstate.Processor
 	appStateSyncLock sync.Mutex
 

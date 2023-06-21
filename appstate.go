@@ -70,7 +70,7 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 		cli.Log.Infof("done decoding patches %v", name)
 		wasFullSync := state.Version == 0 && patches.Snapshot != nil
 		state = newState
-		if name == appstate.WAPatchCriticalUnblockLow && wasFullSync && !cli.EmitAppStateEventsOnFullSync {
+		if name == appstate.WAPatchCriticalUnblockLow && wasFullSync && !cli.EmitAppStateEventsOnFullSync && cli.StoreContacts {
 			cli.Log.Infof("start storing contacts %v", name)
 			var contacts []store.ContactEntry
 			mutations, contacts = cli.filterContacts(mutations)
