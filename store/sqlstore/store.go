@@ -441,6 +441,7 @@ const (
 		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name) VALUES ($1, $2, $3, $4)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET first_name=excluded.first_name, full_name=excluded.full_name
 	`
+	deleteContactNameQuery   = `DELETE FROM whatsmeow_contacts WHERE our_jid=$1 AND their_jid=$2`
 	putManyContactNamesQuery = `
 		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name)
 		VALUES %s
@@ -522,6 +523,20 @@ func (s *SQLStore) PutContactName(user types.JID, firstName, fullName string) er
 		cached.Found = true
 	}
 	return nil
+}
+
+func (s *SQLStore) DeleteContactName(user types.JID) error {
+	s.contactCacheLock.Lock()
+	defer s.contactCacheLock.Unlock()
+
+	_, ok := s.contactCache[user]
+	if ok {
+		delete(s.contactCache, user)
+	}
+
+	_, err := s.db.Exec(
+		deleteContactNameQuery, s.JID, user)
+	return err
 }
 
 const contactBatchSize = 300
