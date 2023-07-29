@@ -83,6 +83,7 @@ type ContactStore interface {
 	PutPushName(user types.JID, pushName string) (bool, string, error)
 	PutBusinessName(user types.JID, businessName string) (bool, string, error)
 	PutContactName(user types.JID, fullName, firstName string) error
+	DeleteContactName(user types.JID) error
 	PutAllContactNames(contacts []ContactEntry) error
 	GetContact(user types.JID) (types.ContactInfo, error)
 	GetAllContacts() (map[types.JID]types.ContactInfo, error)

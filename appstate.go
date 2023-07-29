@@ -107,8 +107,7 @@ func (cli *Client) filterContacts(mutations []appstate.Mutation) ([]appstate.Mut
 	return filteredMutations, contacts
 }
 
-func (cli *Client) dispatchAppState(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
-
+func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
 	dispatchEvts := !fullSync || emitOnFullSync
 
 	if mutation.Operation != waProto.SyncdMutation_SET {
@@ -266,6 +265,38 @@ func (cli *Client) dispatchAppState(mutation appstate.Mutation, fullSync bool, e
 	}
 	if dispatchEvts && eventToDispatch != nil {
 		cli.dispatchEvent(eventToDispatch)
+	}
+}
+
+func (cli *Client) dispatchAppStateRemove(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
+	var jid types.JID
+	if len(mutation.Index) > 1 {
+		jid, _ = types.ParseJID(mutation.Index[1])
+	}
+
+	var storeDeleteError error
+
+	switch mutation.Index[0] {
+	case appstate.IndexContact:
+		if cli.Store.Contacts != nil {
+			storeDeleteError = cli.Store.Contacts.DeleteContactName(jid)
+		}
+	}
+
+	if storeDeleteError != nil {
+		cli.Log.Errorf("Failed to remove data from store after app state mutation: %v", storeDeleteError)
+	}
+}
+
+func (cli *Client) dispatchAppState(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
+	switch mutation.Operation {
+	case waProto.SyncdMutation_SET:
+		cli.dispatchAppStateSet(mutation, fullSync, emitOnFullSync)
+	case waProto.SyncdMutation_REMOVE:
+		cli.dispatchAppStateRemove(mutation, fullSync, emitOnFullSync)
+	default:
+		cli.Log.Warnf("Got invalid type of mutation operation: %v", mutation.Operation)
+		return
 	}
 }
 
