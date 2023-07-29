@@ -698,6 +698,13 @@ func handleCmd(cmd string, args []string) {
 		if err != nil {
 			log.Errorf("Failed to set disappearing timer: %v", err)
 		}
+	case "contactslen":
+		c, err := cli.Store.Contacts.GetAllContacts()
+		if err != nil {
+			log.Errorf("err fetching contacts: %v", err)
+			return
+		}
+		log.Infof("contacts len is %v", len(c))
 	case "setdefaultdisappeartimer":
 		if len(args) < 1 {
 			log.Errorf("Usage: setdefaultdisappeartimer <days>")
