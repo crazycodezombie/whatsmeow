@@ -761,9 +761,18 @@ func handleCmd(cmd string, args []string) {
 			return
 		}
 
-		err = cli.SendAppState(appstate.BuildArchive(target, action, time.Time{}, nil))
+		settings, err := cli.Store.ChatSettings.GetChatSettings(target)
 		if err != nil {
-			log.Errorf("Error changing chat's archive state: %v", err)
+			log.Errorf("invalid second argument: %v", err)
+			return
+		}
+		if !settings.Found || !settings.Archived {
+			err = cli.SendAppState(appstate.BuildArchive(target, action, time.Time{}, nil))
+			if err != nil {
+				log.Errorf("Error changing chat's archive state: %v", err)
+			}
+		} else {
+			log.Infof("already archived")
 		}
 	case "mute":
 		if len(args) < 2 {
