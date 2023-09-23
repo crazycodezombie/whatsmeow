@@ -217,6 +217,11 @@ func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool
 			Action:       mutation.Action.GetUnarchiveChatsSetting(),
 			FromFullSync: fullSync,
 		}
+		cli.Store.UnarchiveChatsSettings = mutation.Action.GetUnarchiveChatsSetting().GetUnarchiveChats()
+		err := cli.Store.Save()
+		if err != nil {
+			cli.Log.Errorf("Failed to save device store after updating unarchive chat settings: %v", err)
+		}
 	case appstate.IndexUserStatusMute:
 		eventToDispatch = &events.UserStatusMute{
 			JID:          jid,
