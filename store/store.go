@@ -134,11 +134,12 @@ type Device struct {
 	RegistrationID uint32
 	AdvSecretKey   []byte
 
-	ID           *types.JID
-	Account      *waProto.ADVSignedDeviceIdentity
-	Platform     string
-	BusinessName string
-	PushName     string
+	ID                     *types.JID
+	Account                *waProto.ADVSignedDeviceIdentity
+	Platform               string
+	BusinessName           string
+	PushName               string
+	UnarchiveChatsSettings bool
 
 	Initialized   bool
 	Identities    IdentityStore
