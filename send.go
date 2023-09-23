@@ -188,6 +188,14 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waPro
 		cli.cancelResponse(req.ID, respChan)
 		return
 	}
+
+	if cli.Store.UnarchiveChatsSettings {
+		err = cli.Store.ChatSettings.PutArchived(to, false)
+		if err != nil {
+			cli.Log.Warnf("failed to set %v archived to false")
+		}
+	}
+
 	var respNode *waBinary.Node
 	select {
 	case respNode = <-respChan:
