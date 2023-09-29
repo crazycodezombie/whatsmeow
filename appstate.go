@@ -28,6 +28,10 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 	cli.Log.Infof("starting fetch %v app state", name)
 	defer func() { cli.Log.Infof("done fetch %v app state", name) }()
 	defer cli.appStateSyncLock.Unlock()
+	return cli.fetchAppStateNoLock(name, fullSync, onlyIfNotSynced)
+}
+
+func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
 	if fullSync {
 		err := cli.Store.AppState.DeleteAppStateVersion(string(name))
 		if err != nil {
@@ -385,6 +389,11 @@ func (cli *Client) requestAppStateKeys(ctx context.Context, rawKeyIDs [][]byte) 
 //
 //	cli.SendAppState(appstate.BuildMute(targetJID, true, 24 * time.Hour))
 func (cli *Client) SendAppState(patch appstate.PatchInfo) error {
+	cli.appStateSyncLock.Lock()
+	cli.Log.Infof("starting setting %v app state", patch.Type)
+	defer func() { cli.Log.Infof("done setting %v app state", patch.Type) }()
+	defer cli.appStateSyncLock.Unlock()
+
 	version, hash, err := cli.Store.AppState.GetAppStateVersion(string(patch.Type))
 	if err != nil {
 		return err
@@ -435,5 +444,5 @@ func (cli *Client) SendAppState(patch appstate.PatchInfo) error {
 		return fmt.Errorf("%w: %s", ErrAppStateUpdate, respCollection.XMLString())
 	}
 
-	return cli.FetchAppState(patch.Type, false, false)
+	return cli.fetchAppStateNoLock(patch.Type, false, false)
 }
