@@ -508,6 +508,7 @@ func (cli *Client) storeHistoricalMessageSecrets(conversations []*waProto.Conver
 func (cli *Client) handleDecryptedMessage(info *types.MessageInfo, msg *waProto.Message, retryCount int) {
 	cli.processProtocolParts(info, msg)
 	if cli.Store.UnarchiveChatsSettings {
+		cli.Log.Infof("unarchiving chat %v", info.Chat)
 		err := cli.Store.ChatSettings.PutArchived(info.Chat, false)
 		if err != nil {
 			cli.Log.Warnf("failed to set %v archived to false after receiving message from %v")
