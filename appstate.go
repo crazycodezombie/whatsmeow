@@ -60,7 +60,7 @@ func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, only
 		}
 		hasMore = patches.HasMorePatches
 
-		mutations, newState, err := cli.appStateProc.DecodePatches(patches, state, true)
+		mutations, newState, err := cli.appStateProc.DecodePatches(patches, state, cli.validateMACs)
 		if err != nil {
 			if errors.Is(err, appstate.ErrKeyNotFound) {
 				go cli.requestMissingAppStateKeys(context.TODO(), patches)
