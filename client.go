@@ -145,6 +145,8 @@ type Client struct {
 
 	proxy socket.Proxy
 	http  *http.Client
+
+	validateMACs bool
 }
 
 // Size of buffer for the channel that all incoming XML nodes go through.
@@ -167,7 +169,7 @@ const handlerQueueSize = 65536
 //		panic(err)
 //	}
 //	client := whatsmeow.NewClient(deviceStore, nil)
-func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
+func NewClient(deviceStore *store.Device, log waLog.Logger, validateMACs bool) *Client {
 	if log == nil {
 		log = waLog.Noop
 	}
@@ -206,6 +208,7 @@ func NewClient(deviceStore *store.Device, log waLog.Logger) *Client {
 		EnableAutoReconnect:   true,
 		AutoTrustIdentity:     true,
 		DontSendSelfBroadcast: true,
+		validateMACs:          validateMACs,
 	}
 	cli.nodeHandlers = map[string]nodeHandler{
 		"message":      cli.handleEncryptedMessage,
