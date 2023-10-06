@@ -441,6 +441,10 @@ type OfflineSyncCompleted struct {
 	Count int
 }
 
+// HistorySyncCompleted is emitted after the server has finished sending all history sync events.
+type HistorySyncCompleted struct {
+}
+
 type MediaRetryError struct {
 	Code int
 }

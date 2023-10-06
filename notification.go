@@ -8,7 +8,6 @@ package whatsmeow
 
 import (
 	"errors"
-
 	"go.mau.fi/whatsmeow/appstate"
 	waBinary "go.mau.fi/whatsmeow/binary"
 	"go.mau.fi/whatsmeow/store"
@@ -48,11 +47,12 @@ func (cli *Client) handleEncryptNotification(node *waBinary.Node) {
 }
 
 func (cli *Client) handleAppStateNotification(node *waBinary.Node) {
+	cli.Log.Infof("handling notification")
 	for _, collection := range node.GetChildrenByTag("collection") {
 		ag := collection.AttrGetter()
 		name := appstate.WAPatchName(ag.String("name"))
 		version := ag.Uint64("version")
-		cli.Log.Debugf("Got server sync notification that app state %s has updated to version %d", name, version)
+		cli.Log.Infof("Got server sync notification that app state %s has updated to version %d", name, version)
 		err := cli.FetchAppState(name, false, false)
 		if errors.Is(err, ErrIQDisconnected) || errors.Is(err, ErrNotConnected) {
 			// There are some app state changes right before a remote logout, so stop syncing if we're disconnected.
@@ -274,7 +274,7 @@ func (cli *Client) handleNotification(node *waBinary.Node) {
 		if err != nil {
 			cli.Log.Errorf("Failed to parse group notification: %v", err)
 		} else {
-			go cli.dispatchEvent(evt)
+			cli.dispatchEvent(evt)
 		}
 	case "picture":
 		cli.handlePictureNotification(node)
@@ -283,7 +283,7 @@ func (cli *Client) handleNotification(node *waBinary.Node) {
 	case "privacy_token":
 		cli.handlePrivacyTokenNotification(node)
 	case "link_code_companion_reg":
-		go cli.tryHandleCodePairNotification(node)
+		cli.tryHandleCodePairNotification(node)
 	// Other types: business, disappearing_mode, server, status, pay, psa
 	default:
 		cli.Log.Debugf("Unhandled notification with type %s", notifType)
