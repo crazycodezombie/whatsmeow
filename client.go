@@ -73,9 +73,6 @@ type Client struct {
 	appStateProc     *appstate.Processor
 	appStateSyncLock sync.Mutex
 
-	historySyncNotifications  chan *waProto.HistorySyncNotification
-	historySyncHandlerStarted uint32
-
 	uploadPreKeysLock sync.Mutex
 	lastPreKeyUpload  time.Time
 
@@ -187,8 +184,6 @@ func NewClient(deviceStore *store.Device, log waLog.Logger, validateMACs bool) *
 		handlerQueue:    make(chan *waBinary.Node, handlerQueueSize),
 		appStateProc:    appstate.NewProcessor(deviceStore, log.Sub("AppState")),
 		socketWait:      make(chan struct{}),
-
-		historySyncNotifications: make(chan *waProto.HistorySyncNotification, 32),
 
 		groupParticipantsCache: make(map[types.JID][]types.JID),
 		userDevicesCache:       make(map[types.JID][]types.JID),
@@ -559,7 +554,7 @@ func (cli *Client) handleFrame(data []byte) {
 			}()
 		}
 	} else if node.Tag != "ack" {
-		cli.Log.Debugf("Didn't handle WhatsApp node %s", node.Tag)
+		cli.Log.Warnf("Didn't handle WhatsApp node %s", node.Tag)
 	}
 }
 
@@ -576,9 +571,13 @@ func (cli *Client) handlerQueueLoop(ctx context.Context) {
 	timer := time.NewTimer(5 * time.Minute)
 	stopAndDrainTimer(timer)
 	cli.Log.Debugf("Starting handler queue loop")
+	queueMessageIndex := 0
 	for {
+		curQueueMessageIndex := queueMessageIndex
+		queueMessageIndex++
 		select {
 		case node := <-cli.handlerQueue:
+			cli.Log.Infof("Start handling queue message %v: %v", curQueueMessageIndex, node.XMLString())
 			doneChan := make(chan struct{}, 1)
 			go func() {
 				start := time.Now()
@@ -592,6 +591,7 @@ func (cli *Client) handlerQueueLoop(ctx context.Context) {
 			timer.Reset(5 * time.Minute)
 			select {
 			case <-doneChan:
+				cli.Log.Infof("Done handling queue message %v: %v", curQueueMessageIndex, node.XMLString())
 				stopAndDrainTimer(timer)
 			case <-timer.C:
 				cli.Log.Warnf("Node handling is taking long for %s - continuing in background", node.XMLString())
