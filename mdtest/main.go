@@ -14,6 +14,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math/rand"
 	"mime"
 	"net/http"
 	"os"
@@ -73,7 +74,7 @@ func main() {
 		return
 	}
 
-	cli = whatsmeow.NewClient(device, waLog.Stdout("Client", logLevel, true))
+	cli = whatsmeow.NewClient(device, waLog.Stdout("Client", logLevel, true), true)
 	var isWaitingForPair atomic.Bool
 	cli.PrePairCallback = func(jid types.JID, platform, businessName string) bool {
 		isWaitingForPair.Store(true)
@@ -174,6 +175,42 @@ func parseJID(arg string) (types.JID, bool) {
 		}
 		return recipient, true
 	}
+}
+
+func IsJID(contact string) bool {
+	return strings.ContainsRune(contact, '@')
+}
+
+func validateAndGetJID(contact string) (types.JID, error) {
+	if IsJID(contact) {
+		jid, err := types.ParseJID(contact)
+		if err != nil {
+			return types.JID{}, fmt.Errorf("1")
+		} else if jid.User == "" {
+			return types.JID{}, fmt.Errorf("2")
+		}
+		return jid, nil
+	}
+
+	// should be phone number
+	result, err := cli.IsOnWhatsApp([]string{contact})
+	if err != nil {
+		errStr := fmt.Sprintf("error checking if phone %v has whatsapp: %v", contact, err)
+		log.Errorf(errStr)
+		return types.JID{}, fmt.Errorf("3")
+	}
+
+	if len(result) == 0 {
+		errStr := "failed to check if the phone exists on whatsapp (empty result). treat it as not exists"
+		log.Infof(errStr)
+		return types.JID{}, fmt.Errorf("4")
+	}
+
+	if !result[0].IsIn {
+		return types.JID{}, fmt.Errorf("5")
+	}
+
+	return result[0].JID, nil
 }
 
 func handleCmd(cmd string, args []string) {
@@ -613,7 +650,18 @@ func handleCmd(cmd string, args []string) {
 			log.Errorf("err fetching contacts: %v", err)
 			return
 		}
-		log.Infof("contacts len is %v", len(c))
+
+		onlyPhoneContacts := make(map[types.JID]types.ContactInfo)
+		for k, v := range c {
+			if v.IsPhoneContact {
+				onlyPhoneContacts[k] = v
+			}
+		}
+
+		log.Infof("contacts len is %v", len(onlyPhoneContacts))
+		//for _, cc := range onlyPhoneContacts {
+		//	log.Infof(cc.FullName)
+		//}
 	case "send":
 		if len(args) < 2 {
 			log.Errorf("Usage: send <jid> <text>")
@@ -783,6 +831,47 @@ func handleCmd(cmd string, args []string) {
 		} else {
 			log.Infof("already archived=%v", action)
 		}
+	case "crazyarchive":
+		rand.Seed(time.Now().UnixNano())
+		numbers := []string{"+972522209575", "+16463091760", "+972528730484", "120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"}
+
+		for i := 0; i < 10; i++ {
+			for _, n := range numbers {
+				target, ok := parseJID(n)
+				if !ok {
+					return
+				}
+
+				if rand.Float32() < 0.20 {
+					log.Infof("####### SENDING MESSAGE TO %v", n)
+					msg := &waProto.Message{Conversation: proto.String(fmt.Sprintf("בדיקה מספר %v", i))}
+					resp, err := cli.SendMessage(context.Background(), target, msg)
+					if err != nil {
+						log.Errorf("Error sending message: %v", err)
+					} else {
+						log.Infof("Message sent (server timestamp: %s)", resp.Timestamp)
+					}
+
+					time.Sleep(5 * time.Second)
+				}
+
+				settings, err := cli.Store.ChatSettings.GetChatSettings(target)
+				if err != nil {
+					log.Errorf("invalid second argument: %v", err)
+					return
+				}
+
+				action := !settings.Found || !settings.Archived
+				log.Infof("####### GOING TO SET %v ARCHIVE TO %v", n, action)
+				err = cli.SendAppState(appstate.BuildArchive(target, action, time.Time{}, nil))
+				if err != nil {
+					log.Errorf("Error changing chat's archive state: %v", err)
+				}
+
+				time.Sleep(2 * time.Second)
+			}
+		}
+
 	case "mute":
 		if len(args) < 2 {
 			log.Errorf("Usage: mute <jid> <action>")
@@ -993,5 +1082,9 @@ func handler(rawEvt interface{}) {
 		log.Infof("Blocklist event: %+v", evt)
 	case *events.OfflineSyncCompleted:
 		log.Infof("sync completed")
+	case *events.Archive:
+		log.Infof("got archive")
+	case *events.HistorySyncCompleted:
+		log.Infof("got history sync completed")
 	}
 }

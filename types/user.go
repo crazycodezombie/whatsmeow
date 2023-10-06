@@ -37,7 +37,8 @@ type ProfilePictureInfo struct {
 
 // ContactInfo contains the cached names of a WhatsApp user.
 type ContactInfo struct {
-	Found bool
+	Found          bool
+	IsPhoneContact bool
 
 	FirstName    string
 	FullName     string

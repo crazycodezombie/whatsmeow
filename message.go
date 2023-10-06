@@ -13,8 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"runtime/debug"
-	"sync/atomic"
 	"time"
 
 	"go.mau.fi/libsignal/groups"
@@ -332,26 +330,6 @@ func (cli *Client) handleSenderKeyDistributionMessage(chat, from types.JID, rawS
 	cli.Log.Debugf("Processed sender key distribution message from %s in %s", senderKeyName.Sender().String(), senderKeyName.GroupID())
 }
 
-func (cli *Client) handleHistorySyncNotificationLoop() {
-	defer func() {
-		atomic.StoreUint32(&cli.historySyncHandlerStarted, 0)
-		err := recover()
-		if err != nil {
-			cli.Log.Errorf("History sync handler panicked: %v\n%s", err, debug.Stack())
-		}
-
-		// Check in case something new appeared in the channel between the loop stopping
-		// and the atomic variable being updated. If yes, restart the loop.
-		if len(cli.historySyncNotifications) > 0 && atomic.CompareAndSwapUint32(&cli.historySyncHandlerStarted, 0, 1) {
-			cli.Log.Warnf("New history sync notifications appeared after loop stopped, restarting loop...")
-			cli.handleHistorySyncNotificationLoop()
-		}
-	}()
-	for notif := range cli.historySyncNotifications {
-		cli.handleHistorySyncNotification(notif)
-	}
-}
-
 func (cli *Client) handleHistorySyncNotification(notif *waProto.HistorySyncNotification) {
 	var historySync waProto.HistorySync
 	if data, err := cli.Download(notif); err != nil {
@@ -372,6 +350,9 @@ func (cli *Client) handleHistorySyncNotification(notif *waProto.HistorySyncNotif
 		cli.dispatchEvent(&events.HistorySync{
 			Data: &historySync,
 		})
+		if historySync.GetProgress() == 100 {
+			cli.dispatchEvent(&events.HistorySyncCompleted{})
+		}
 	}
 }
 
@@ -434,24 +415,21 @@ func (cli *Client) handleProtocolMessage(info *types.MessageInfo, msg *waProto.M
 	protoMsg := msg.GetProtocolMessage()
 
 	if protoMsg.GetHistorySyncNotification() != nil && info.IsFromMe {
-		cli.historySyncNotifications <- protoMsg.HistorySyncNotification
-		if atomic.CompareAndSwapUint32(&cli.historySyncHandlerStarted, 0, 1) {
-			go cli.handleHistorySyncNotificationLoop()
-		}
-		go cli.sendProtocolMessageReceipt(info.ID, "hist_sync")
+		cli.handleHistorySyncNotification(protoMsg.HistorySyncNotification)
+		cli.sendProtocolMessageReceipt(info.ID, "hist_sync")
 	}
 
 	if protoMsg.GetPeerDataOperationRequestResponseMessage().GetPeerDataOperationRequestType() == waProto.PeerDataOperationRequestType_PLACEHOLDER_MESSAGE_RESEND {
-		go cli.handlePlaceholderResendResponse(protoMsg.GetPeerDataOperationRequestResponseMessage())
+		cli.handlePlaceholderResendResponse(protoMsg.GetPeerDataOperationRequestResponseMessage())
 	}
 
 	if protoMsg.GetAppStateSyncKeyShare() != nil && info.IsFromMe {
 		cli.Log.Infof("got app state sync keys message")
-		go cli.handleAppStateSyncKeyShare(protoMsg.AppStateSyncKeyShare)
+		cli.handleAppStateSyncKeyShare(protoMsg.AppStateSyncKeyShare)
 	}
 
 	if info.Category == "peer" {
-		go cli.sendProtocolMessageReceipt(info.ID, "peer_msg")
+		cli.sendProtocolMessageReceipt(info.ID, "peer_msg")
 	}
 }
 
