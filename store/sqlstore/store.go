@@ -438,28 +438,28 @@ func (s *SQLStore) GetAppStateMutationMAC(name string, indexMAC []byte) (valueMA
 
 const (
 	putContactNameQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name) VALUES ($1, $2, $3, $4)
+		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name, is_phone_contact) VALUES ($1, $2, $3, $4, TRUE)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET first_name=excluded.first_name, full_name=excluded.full_name
 	`
 	deleteContactNameQuery   = `DELETE FROM whatsmeow_contacts WHERE our_jid=$1 AND their_jid=$2`
 	putManyContactNamesQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name)
+		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name, is_phone_contact)
 		VALUES %s
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET first_name=excluded.first_name, full_name=excluded.full_name
 	`
 	putPushNameQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, push_name) VALUES ($1, $2, $3)
+		INSERT INTO whatsmeow_contacts (our_jid, their_jid, push_name, is_phone_contact) VALUES ($1, $2, $3, FALSE)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET push_name=excluded.push_name
 	`
 	putBusinessNameQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, business_name) VALUES ($1, $2, $3)
+		INSERT INTO whatsmeow_contacts (our_jid, their_jid, business_name, is_phone_contact) VALUES ($1, $2, $3, FALSE)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET business_name=excluded.business_name
 	`
 	getContactQuery = `
-		SELECT first_name, full_name, push_name, business_name FROM whatsmeow_contacts WHERE our_jid=$1 AND their_jid=$2
+		SELECT first_name, full_name, push_name, business_name, is_phone_contact FROM whatsmeow_contacts WHERE our_jid=$1 AND their_jid=$2
 	`
 	getAllContactsQuery = `
-		SELECT their_jid, first_name, full_name, push_name, business_name FROM whatsmeow_contacts WHERE our_jid=$1
+		SELECT their_jid, first_name, full_name, push_name, business_name, is_phone_contact FROM whatsmeow_contacts WHERE our_jid=$1
 	`
 )
 
@@ -542,12 +542,13 @@ func (s *SQLStore) DeleteContactName(user types.JID) error {
 const contactBatchSize = 300
 
 func (s *SQLStore) putContactNamesBatch(tx execable, contacts []store.ContactEntry) error {
-	values := make([]interface{}, 1, 1+len(contacts)*3)
+	values := make([]interface{}, 2, 2+len(contacts)*3)
 	queryParts := make([]string, 0, len(contacts))
 	values[0] = s.JID
-	placeholderSyntax := "($1, $%d, $%d, $%d)"
+	values[1] = true
+	placeholderSyntax := "($1, $%d, $%d, $%d, $2)"
 	if s.dialect == "sqlite3" {
-		placeholderSyntax = "(?1, ?%d, ?%d, ?%d)"
+		placeholderSyntax = "(?1, ?%d, ?%d, ?%d, ?2)"
 	}
 	i := 0
 	handledContacts := make(map[types.JID]struct{}, len(contacts))
@@ -563,7 +564,7 @@ func (s *SQLStore) putContactNamesBatch(tx execable, contacts []store.ContactEnt
 			continue
 		}
 		handledContacts[contact.JID] = struct{}{}
-		baseIndex := i*3 + 1
+		baseIndex := i*3 + 2
 		values = append(values, contact.JID.String(), contact.FirstName, contact.FullName)
 		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, baseIndex+1, baseIndex+2, baseIndex+3))
 		i++
@@ -573,6 +574,7 @@ func (s *SQLStore) putContactNamesBatch(tx execable, contacts []store.ContactEnt
 }
 
 func (s *SQLStore) PutAllContactNames(contacts []store.ContactEntry) error {
+	s.log.Infof("inserting %v contacts to the db", len(contacts))
 	if len(contacts) > contactBatchSize {
 		tx, err := s.db.Begin()
 		if err != nil {
@@ -617,16 +619,18 @@ func (s *SQLStore) getContact(user types.JID) (*types.ContactInfo, error) {
 	}
 
 	var first, full, push, business sql.NullString
-	err := s.db.QueryRow(getContactQuery, s.JID, user).Scan(&first, &full, &push, &business)
+	var isPhoneContact bool
+	err := s.db.QueryRow(getContactQuery, s.JID, user).Scan(&first, &full, &push, &business, &isPhoneContact)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 	info := &types.ContactInfo{
-		Found:        err == nil,
-		FirstName:    first.String,
-		FullName:     full.String,
-		PushName:     push.String,
-		BusinessName: business.String,
+		Found:          err == nil,
+		IsPhoneContact: isPhoneContact,
+		FirstName:      first.String,
+		FullName:       full.String,
+		PushName:       push.String,
+		BusinessName:   business.String,
 	}
 	s.contactCache[user] = info
 	return info, nil
@@ -653,16 +657,18 @@ func (s *SQLStore) GetAllContacts() (map[types.JID]types.ContactInfo, error) {
 	for rows.Next() {
 		var jid types.JID
 		var first, full, push, business sql.NullString
-		err = rows.Scan(&jid, &first, &full, &push, &business)
+		var isPhoneContact bool
+		err = rows.Scan(&jid, &first, &full, &push, &business, &isPhoneContact)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
 		info := types.ContactInfo{
-			Found:        true,
-			FirstName:    first.String,
-			FullName:     full.String,
-			PushName:     push.String,
-			BusinessName: business.String,
+			Found:          true,
+			IsPhoneContact: isPhoneContact,
+			FirstName:      first.String,
+			FullName:       full.String,
+			PushName:       push.String,
+			BusinessName:   business.String,
 		}
 		output[jid] = info
 		s.contactCache[jid] = &info

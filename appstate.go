@@ -72,7 +72,7 @@ func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, only
 		if name == appstate.WAPatchCriticalUnblockLow && wasFullSync && !cli.EmitAppStateEventsOnFullSync {
 			var contacts []store.ContactEntry
 			mutations, contacts = cli.filterContacts(mutations)
-			cli.Log.Debugf("Mass inserting app state snapshot with %d contacts into the store", len(contacts))
+			cli.Log.Infof("Mass inserting app state snapshot with %d contacts into the store", len(contacts))
 			err = cli.Store.Contacts.PutAllContactNames(contacts)
 			if err != nil {
 				// This is a fairly serious failure, so just abort the whole thing
