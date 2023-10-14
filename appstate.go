@@ -78,10 +78,21 @@ func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, only
 				// This is a fairly serious failure, so just abort the whole thing
 				return fmt.Errorf("failed to update contact store with data from snapshot: %v", err)
 			}
+
+			archives := cli.getArchivesInfo(mutations)
+			cli.Log.Infof("Mass inserting app state snapshot with %d archives into the store", len(archives))
+			err = cli.Store.ChatSettings.PutArchived(archives)
+			if err != nil {
+				// This is a fairly serious failure, so just abort the whole thing
+				return fmt.Errorf("failed to update contact store with data from snapshot: %v", err)
+			}
 		}
 		for _, mutation := range mutations {
 			cli.dispatchAppState(mutation, fullSync, cli.EmitAppStateEventsOnFullSync)
 		}
+		//if cli.Store.ChatSettings != nil {
+		//	storeUpdateError = cli.Store.ChatSettings.PutArchived(jid, act.GetArchived())
+		//}
 	}
 	if fullSync {
 		cli.Log.Debugf("Full sync of app state %s completed. Current version: %d", name, state.Version)
@@ -109,6 +120,30 @@ func (cli *Client) filterContacts(mutations []appstate.Mutation) ([]appstate.Mut
 		}
 	}
 	return filteredMutations, contacts
+}
+
+func (cli *Client) getArchivesInfo(mutations []appstate.Mutation) []store.ArchivedEntry {
+	archivesMap := make(map[types.JID]bool)
+	for _, mutation := range mutations {
+		if mutation.Operation != waProto.SyncdMutation_SET {
+			continue
+		}
+
+		if mutation.Index[0] != appstate.IndexArchive || len(mutation.Index) < 2 {
+			continue
+		}
+
+		jid, _ := types.ParseJID(mutation.Index[1])
+		action := mutation.Action.GetArchiveChatAction().GetArchived()
+		archivesMap[jid] = action
+	}
+
+	archives := make([]store.ArchivedEntry, 0, len(archivesMap))
+	for jid, archive := range archivesMap {
+		archives = append(archives, store.ArchivedEntry{JID: jid, Archived: archive})
+	}
+
+	return archives
 }
 
 func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
@@ -150,9 +185,6 @@ func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool
 	case appstate.IndexArchive:
 		act := mutation.Action.GetArchiveChatAction()
 		eventToDispatch = &events.Archive{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}
-		if cli.Store.ChatSettings != nil {
-			storeUpdateError = cli.Store.ChatSettings.PutArchived(jid, act.GetArchived())
-		}
 	case appstate.IndexContact:
 		act := mutation.Action.GetContactAction()
 		eventToDispatch = &events.Contact{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}

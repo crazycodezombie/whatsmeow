@@ -540,6 +540,7 @@ func (s *SQLStore) DeleteContactName(user types.JID) error {
 }
 
 const contactBatchSize = 300
+const archiveBatchSize = 300
 
 func (s *SQLStore) putContactNamesBatch(tx execable, contacts []store.ContactEntry) error {
 	values := make([]interface{}, 2, 2+len(contacts)*3)
@@ -677,6 +678,12 @@ func (s *SQLStore) GetAllContacts() (map[types.JID]types.ContactInfo, error) {
 }
 
 const (
+	putManySettingQuery = `
+		INSERT INTO whatsmeow_chat_settings (our_jid, chat_jid, %[1]s)
+		VALUES %s
+		ON CONFLICT (our_jid, chat_jid) DO UPDATE SET %[1]s=excluded.%[1]s
+	`
+
 	putChatSettingQuery = `
 		INSERT INTO whatsmeow_chat_settings (our_jid, chat_jid, %[1]s) VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, chat_jid) DO UPDATE SET %[1]s=excluded.%[1]s
@@ -703,6 +710,72 @@ func (s *SQLStore) PutPinned(chat types.JID, pinned bool) error {
 func (s *SQLStore) PutArchived(chat types.JID, archived bool) error {
 	_, err := s.db.Exec(fmt.Sprintf(putChatSettingQuery, "archived"), s.JID, chat, archived)
 	return err
+}
+
+func (s *SQLStore) putArchivesBatch(tx execable, archives []store.ArchivedEntry) error {
+	values := make([]interface{}, 1, 1+len(archives)*2)
+	queryParts := make([]string, 0, len(archives))
+	values[0] = s.JID
+	placeholderSyntax := "($1, $%d, $%d)"
+	if s.dialect == "sqlite3" {
+		placeholderSyntax = "(?1, ?%d, ?%d)"
+	}
+	i := 0
+	handledArchives := make(map[types.JID]struct{}, len(archives))
+	for _, archive := range archives {
+		if archive.JID.IsEmpty() {
+			s.log.Warnf("Empty archive JID in mass insert: %+v", archive)
+			continue
+		}
+		// The whole query will break if there are duplicates, so make sure there aren't any duplicates
+		_, alreadyHandled := handledArchives[archive.JID]
+		if alreadyHandled {
+			s.log.Warnf("Duplicate archive info for %s in mass insert", archive.JID)
+			continue
+		}
+		handledArchives[archive.JID] = struct{}{}
+		baseIndex := i*2 + 1
+		values = append(values, archive.JID.String(), archive.Archived)
+		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, baseIndex+1, baseIndex+2))
+		i++
+	}
+	_, err := tx.Exec(fmt.Sprintf(putManySettingQuery, "archived", strings.Join(queryParts, ",")), values...)
+	return err
+}
+
+func (s *SQLStore) PutAllArchives(archives []store.ArchivedEntry) error {
+	s.log.Infof("inserting %v archives to the db", len(archives))
+	if len(archives) > archiveBatchSize {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		for i := 0; i < len(archives); i += archiveBatchSize {
+			var archivesSlice []store.ArchivedEntry
+			if len(archives) > i+archiveBatchSize {
+				archivesSlice = archives[i : i+archiveBatchSize]
+			} else {
+				archivesSlice = archives[i:]
+			}
+			err = s.putArchivesBatch(tx, archivesSlice)
+			if err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	} else if len(archives) > 0 {
+		err := s.putArchivesBatch(s.db, archives)
+		if err != nil {
+			return err
+		}
+	} else {
+		return nil
+	}
+	return nil
 }
 
 func (s *SQLStore) GetChatSettings(chat types.JID) (settings types.LocalChatSettings, err error) {
