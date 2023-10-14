@@ -78,15 +78,17 @@ func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, only
 				// This is a fairly serious failure, so just abort the whole thing
 				return fmt.Errorf("failed to update contact store with data from snapshot: %v", err)
 			}
+		}
 
+		if name == appstate.WAPatchRegularLow {
 			archives := cli.getArchivesInfo(mutations)
 			cli.Log.Infof("Mass inserting app state snapshot with %d archives into the store", len(archives))
-			err = cli.Store.ChatSettings.PutArchived(archives)
+			err = cli.Store.ChatSettings.PutAllArchives(archives)
 			if err != nil {
-				// This is a fairly serious failure, so just abort the whole thing
-				return fmt.Errorf("failed to update contact store with data from snapshot: %v", err)
+				return fmt.Errorf("failed to update archive store with data from snapshot: %v", err)
 			}
 		}
+
 		for _, mutation := range mutations {
 			cli.dispatchAppState(mutation, fullSync, cli.EmitAppStateEventsOnFullSync)
 		}
@@ -108,6 +110,11 @@ func (cli *Client) filterContacts(mutations []appstate.Mutation) ([]appstate.Mut
 	contacts := make([]store.ContactEntry, 0, len(mutations))
 	for _, mutation := range mutations {
 		if mutation.Index[0] == "contact" && len(mutation.Index) > 1 {
+			if mutation.Operation != waProto.SyncdMutation_SET {
+				cli.Log.Warnf("should never get %v in contact mutations for snapshot", mutation.Operation)
+				continue
+			}
+
 			jid, _ := types.ParseJID(mutation.Index[1])
 			act := mutation.Action.GetContactAction()
 			contacts = append(contacts, store.ContactEntry{
