@@ -89,11 +89,17 @@ type ContactStore interface {
 	GetAllContacts() (map[types.JID]types.ContactInfo, error)
 }
 
+type ArchivedEntry struct {
+	JID      types.JID
+	Archived bool
+}
+
 type ChatSettingsStore interface {
 	PutMutedUntil(chat types.JID, mutedUntil time.Time) error
 	PutPinned(chat types.JID, pinned bool) error
 	PutArchived(chat types.JID, archived bool) error
 	GetChatSettings(chat types.JID) (types.LocalChatSettings, error)
+	PutAllArchives(archives []ArchivedEntry) error
 }
 
 type DeviceContainer interface {
