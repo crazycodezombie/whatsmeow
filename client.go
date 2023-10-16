@@ -568,7 +568,7 @@ func stopAndDrainTimer(timer *time.Timer) {
 }
 
 func (cli *Client) handlerQueueLoop(ctx context.Context) {
-	timer := time.NewTimer(5 * time.Minute)
+	timer := time.NewTimer(10 * time.Minute)
 	stopAndDrainTimer(timer)
 	cli.Log.Debugf("Starting handler queue loop")
 	queueMessageIndex := 0
@@ -583,12 +583,12 @@ func (cli *Client) handlerQueueLoop(ctx context.Context) {
 				start := time.Now()
 				cli.nodeHandlers[node.Tag](node)
 				duration := time.Since(start)
-				doneChan <- struct{}{}
+				close(doneChan)
 				if duration > 5*time.Second {
 					cli.Log.Warnf("Node handling took %s for %s", duration, node.XMLString())
 				}
 			}()
-			timer.Reset(5 * time.Minute)
+			timer.Reset(10 * time.Minute)
 			select {
 			case <-doneChan:
 				cli.Log.Infof("Done handling queue message %v: %v", curQueueMessageIndex, node.XMLString())
