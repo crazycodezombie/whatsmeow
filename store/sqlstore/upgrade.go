@@ -17,7 +17,7 @@ type upgradeFunc func(*sql.Tx, *Container) error
 //
 // This may be of use if you want to manage the database fully manually, but in most cases you
 // should just call Container.Upgrade to let the library handle everything.
-var Upgrades = [...]upgradeFunc{upgradeV1, upgradeV2, upgradeV3, upgradeV4, upgradeV5, upgradeV6, upgradeV7}
+var Upgrades = [...]upgradeFunc{upgradeV1, upgradeV2, upgradeV3, upgradeV4, upgradeV5, upgradeV6, upgradeV7, upgradeV8}
 
 func (c *Container) getVersion() (int, error) {
 	_, err := c.db.Exec("CREATE TABLE IF NOT EXISTS whatsmeow_version (version INTEGER)")
@@ -294,6 +294,11 @@ func upgradeV6(tx *sql.Tx, _ *Container) error {
 }
 
 func upgradeV7(tx *sql.Tx, _ *Container) error {
-	_, err := tx.Exec("ALTER TABLE whatsmeow_contacts ADD COLUMN is_phone_contact BOOLEAN DEFAULT FALSE")
+	_, err := tx.Exec("ALTER TABLE whatsmeow_contacts ADD COLUMN is_phone_contact BOOLEAN NOT NULL DEFAULT FALSE")
+	return err
+}
+
+func upgradeV8(tx *sql.Tx, _ *Container) error {
+	_, err := tx.Exec("ALTER TABLE whatsmeow_chat_settings ADD COLUMN archived_timestamp BIGINT NOT NULL DEFAULT 0")
 	return err
 }

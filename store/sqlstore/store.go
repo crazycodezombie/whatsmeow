@@ -43,6 +43,9 @@ type SQLStore struct {
 
 	contactCache     map[types.JID]*types.ContactInfo
 	contactCacheLock sync.Mutex
+
+	archivedCache     map[types.JID]*store.ArchivedEntry
+	archivedCacheLock sync.Mutex
 }
 
 // NewSQLStore creates a new SQLStore with the given database container and user JID.
@@ -51,9 +54,10 @@ type SQLStore struct {
 // In general, you should use Container.NewDevice or Container.GetDevice instead of this.
 func NewSQLStore(c *Container, jid types.JID) *SQLStore {
 	return &SQLStore{
-		Container:    c,
-		JID:          jid.String(),
-		contactCache: make(map[types.JID]*types.ContactInfo),
+		Container:     c,
+		JID:           jid.String(),
+		contactCache:  make(map[types.JID]*types.ContactInfo),
+		archivedCache: make(map[types.JID]*store.ArchivedEntry),
 	}
 }
 
@@ -678,10 +682,19 @@ func (s *SQLStore) GetAllContacts() (map[types.JID]types.ContactInfo, error) {
 }
 
 const (
-	putManySettingQuery = `
-		INSERT INTO whatsmeow_chat_settings (our_jid, chat_jid, %[1]s)
+	putManySettingArchivedQuery = `
+		INSERT INTO whatsmeow_chat_settings (our_jid, chat_jid, archived, archived_timestamp)
 		VALUES %s
-		ON CONFLICT (our_jid, chat_jid) DO UPDATE SET %[1]s=excluded.%[1]s
+		ON CONFLICT (our_jid, chat_jid) DO UPDATE SET archived=excluded.archived, archived_timestamp=excluded.archived_timestamp
+	`
+
+	putChatSettingArchivedQuery = `
+		INSERT INTO whatsmeow_chat_settings (our_jid, chat_jid, archived, archived_timestamp) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (our_jid, chat_jid) DO UPDATE SET archived=excluded.archived, archived_timestamp=excluded.archived_timestamp
+	`
+
+	getChatSettingsArchivedQuery = `
+		SELECT archived, archived_timestamp FROM whatsmeow_chat_settings WHERE our_jid=$1 AND chat_jid=$2
 	`
 
 	putChatSettingQuery = `
@@ -707,18 +720,22 @@ func (s *SQLStore) PutPinned(chat types.JID, pinned bool) error {
 	return err
 }
 
-func (s *SQLStore) PutArchived(chat types.JID, archived bool) error {
-	_, err := s.db.Exec(fmt.Sprintf(putChatSettingQuery, "archived"), s.JID, chat, archived)
+func (s *SQLStore) PutArchived(chat types.JID, archiveEntry store.ArchivedEntry) error {
+	s.archivedCacheLock.Lock()
+	defer s.archivedCacheLock.Unlock()
+	s.archivedCache[archiveEntry.JID] = &archiveEntry
+
+	_, err := s.db.Exec(putChatSettingArchivedQuery, s.JID, chat, archiveEntry.Archived, archiveEntry.ArchivedTime)
 	return err
 }
 
 func (s *SQLStore) putArchivesBatch(tx execable, archives []store.ArchivedEntry) error {
-	values := make([]interface{}, 1, 1+len(archives)*2)
+	values := make([]interface{}, 1, 1+len(archives)*3)
 	queryParts := make([]string, 0, len(archives))
 	values[0] = s.JID
-	placeholderSyntax := "($1, $%d, $%d)"
+	placeholderSyntax := "($1, $%d, $%d, $%d)"
 	if s.dialect == "sqlite3" {
-		placeholderSyntax = "(?1, ?%d, ?%d)"
+		placeholderSyntax = "(?1, ?%d, ?%d, ?%d)"
 	}
 	i := 0
 	handledArchives := make(map[types.JID]struct{}, len(archives))
@@ -734,16 +751,25 @@ func (s *SQLStore) putArchivesBatch(tx execable, archives []store.ArchivedEntry)
 			continue
 		}
 		handledArchives[archive.JID] = struct{}{}
-		baseIndex := i*2 + 1
-		values = append(values, archive.JID.String(), archive.Archived)
-		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, baseIndex+1, baseIndex+2))
+		baseIndex := i*3 + 1
+		values = append(values, archive.JID.String(), archive.Archived, archive.ArchivedTime.UnixMilli())
+		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, baseIndex+1, baseIndex+2, baseIndex+3))
 		i++
 	}
-	_, err := tx.Exec(fmt.Sprintf(putManySettingQuery, "archived", strings.Join(queryParts, ",")), values...)
+
+	_, err := tx.Exec(fmt.Sprintf(putManySettingArchivedQuery, strings.Join(queryParts, ",")), values...)
 	return err
 }
 
 func (s *SQLStore) PutAllArchives(archives []store.ArchivedEntry) error {
+	s.archivedCacheLock.Lock()
+	defer s.archivedCacheLock.Unlock()
+
+	for _, archiveEntry := range archives {
+		cur := archiveEntry
+		s.archivedCache[archiveEntry.JID] = &cur
+	}
+
 	s.log.Infof("inserting %v archives to the db", len(archives))
 	if len(archives) > archiveBatchSize {
 		tx, err := s.db.Begin()
@@ -776,6 +802,32 @@ func (s *SQLStore) PutAllArchives(archives []store.ArchivedEntry) error {
 		return nil
 	}
 	return nil
+}
+
+func (s *SQLStore) GetChatSettingsArchived(chat types.JID) (archiveEntry store.ArchivedEntry, ok bool, err error) {
+	cached, ok := s.archivedCache[chat]
+	if ok {
+		return *cached, true, nil
+	}
+
+	s.archivedCacheLock.Lock()
+	s.archivedCacheLock.Unlock()
+
+	var archiveTimestamp int64
+	err = s.db.QueryRow(getChatSettingsArchivedQuery, s.JID, chat).Scan(&archiveEntry.Archived, &archiveTimestamp)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return store.ArchivedEntry{}, false, nil
+		}
+
+		return
+	}
+
+	archiveEntry.JID = chat
+	archiveEntry.ArchivedTime = time.UnixMilli(archiveTimestamp)
+	s.archivedCache[chat] = &archiveEntry
+
+	return
 }
 
 func (s *SQLStore) GetChatSettings(chat types.JID) (settings types.LocalChatSettings, err error) {
