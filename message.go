@@ -302,6 +302,37 @@ func (cli *Client) handleHistorySyncNotification(notif *waProto.HistorySyncNotif
 		} else if len(historySync.GetConversations()) > 0 {
 			cli.storeHistoricalMessageSecrets(historySync.GetConversations())
 		}
+
+		if cli.Store.UnarchiveChatsSettings {
+			for _, conversation := range historySync.Conversations {
+				if conversation.Id == nil || len(conversation.Messages) == 0 {
+					continue
+				}
+
+				jid, _ := types.ParseJID(*conversation.Id)
+				message := conversation.Messages[0]
+
+				if message.GetMessage() == nil {
+					continue
+				}
+
+				messageTime := time.Unix(int64(message.Message.GetMessageTimestamp()), 0)
+
+				archiveEntry, ok, err := cli.Store.ChatSettings.GetChatSettingsArchived(jid)
+				if err != nil {
+					cli.Log.Warnf("unable to determine archive status of %v due to %v", jid, err)
+				}
+
+				if ok && archiveEntry.Archived && archiveEntry.ArchivedTime.Before(messageTime) {
+					cli.Log.Infof("unarchiving chat %v", jid)
+					err = cli.Store.ChatSettings.PutArchived(jid, store.NewArchiveEntry(jid, false, messageTime))
+					if err != nil {
+						cli.Log.Warnf("failed to set %v archived to false after receiving message", jid)
+					}
+				}
+			}
+		}
+
 		cli.dispatchEvent(&events.HistorySync{
 			Data: &historySync,
 		})
@@ -486,10 +517,17 @@ func (cli *Client) storeHistoricalMessageSecrets(conversations []*waProto.Conver
 func (cli *Client) handleDecryptedMessage(info *types.MessageInfo, msg *waProto.Message, retryCount int) {
 	cli.processProtocolParts(info, msg)
 	if cli.Store.UnarchiveChatsSettings {
-		cli.Log.Infof("unarchiving chat %v", info.Chat)
-		err := cli.Store.ChatSettings.PutArchived(info.Chat, false)
+		archiveEntry, ok, err := cli.Store.ChatSettings.GetChatSettingsArchived(info.Chat)
 		if err != nil {
-			cli.Log.Warnf("failed to set %v archived to false after receiving message from %v")
+			cli.Log.Warnf("unable to determine archive status of %v due to %v", info.Chat, err)
+		}
+
+		if ok && archiveEntry.Archived && archiveEntry.ArchivedTime.Before(info.Timestamp) {
+			cli.Log.Infof("unarchiving chat %v", info.Chat)
+			err = cli.Store.ChatSettings.PutArchived(info.Chat, store.NewArchiveEntry(info.Chat, false, info.Timestamp))
+			if err != nil {
+				cli.Log.Warnf("failed to set %v archived to false after receiving message from %v")
+			}
 		}
 	}
 	evt := &events.Message{Info: *info, RawMessage: msg, RetryCount: retryCount}
