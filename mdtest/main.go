@@ -955,9 +955,10 @@ func handleCmd(cmd string, args []string) {
 		}
 	case "crazyarchive":
 		rand.Seed(time.Now().UnixNano())
-		numbers := []string{"+972522209575", "+972528730484", "120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"}
+		numbers := []string{"+972522209575" /*, "+16463091760", "+972528730484", "120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"*/}
 
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 100; i++ {
+			cli.Log.Infof("####### Working on crazy %v", i)
 			for _, n := range numbers {
 				target, ok := parseJID(n)
 				if !ok {
@@ -974,7 +975,7 @@ func handleCmd(cmd string, args []string) {
 						log.Infof("Message sent (server timestamp: %s)", resp.Timestamp)
 					}
 
-					time.Sleep(5 * time.Second)
+					time.Sleep(1100 * time.Millisecond)
 				}
 
 				settings, err := cli.Store.ChatSettings.GetChatSettings(target)
@@ -990,7 +991,7 @@ func handleCmd(cmd string, args []string) {
 					log.Errorf("Error changing chat's archive state: %v", err)
 				}
 
-				time.Sleep(2 * time.Second)
+				time.Sleep(1100 * time.Millisecond)
 			}
 		}
 
@@ -1187,7 +1188,7 @@ func handler(rawEvt interface{}) {
 			metaParts = append(metaParts, "edit")
 		}
 
-		log.Infof("Received message %s from %s (%s): %+v", evt.Info.ID, evt.Info.SourceString(), strings.Join(metaParts, ", "), evt.Message)
+		log.Infof("Received message %s from %s at %v (%s): %+v", evt.Info.ID, evt.Info.SourceString(), evt.Info.Timestamp, strings.Join(metaParts, ", "), evt.Message)
 
 		if evt.Message.GetPollUpdateMessage() != nil {
 			decrypted, err := cli.DecryptPollVote(evt)

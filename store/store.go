@@ -90,16 +90,26 @@ type ContactStore interface {
 }
 
 type ArchivedEntry struct {
-	JID      types.JID
-	Archived bool
+	JID          types.JID
+	Archived     bool
+	ArchivedTime time.Time
+}
+
+func NewArchiveEntry(jid types.JID, archived bool, archivedTime time.Time) ArchivedEntry {
+	return ArchivedEntry{
+		JID:          jid,
+		Archived:     archived,
+		ArchivedTime: archivedTime,
+	}
 }
 
 type ChatSettingsStore interface {
 	PutMutedUntil(chat types.JID, mutedUntil time.Time) error
 	PutPinned(chat types.JID, pinned bool) error
-	PutArchived(chat types.JID, archived bool) error
+	PutArchived(chat types.JID, archiveEntry ArchivedEntry) error
 	GetChatSettings(chat types.JID) (types.LocalChatSettings, error)
 	PutAllArchives(archives []ArchivedEntry) error
+	GetChatSettingsArchived(chat types.JID) (archiveEntry ArchivedEntry, ok bool, err error)
 }
 
 type DeviceContainer interface {
