@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"go.mau.fi/whatsmeow/store"
 	"sort"
 	"strconv"
 	"strings"
@@ -203,9 +204,16 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waPro
 	}
 
 	if cli.Store.UnarchiveChatsSettings {
-		err = cli.Store.ChatSettings.PutArchived(to, false)
+		archiveEntry, ok, err := cli.Store.ChatSettings.GetChatSettingsArchived(to)
 		if err != nil {
-			cli.Log.Warnf("failed to set %v archived to false")
+			cli.Log.Warnf("unable to determine archive status of %v due to %v", to, err)
+		}
+
+		if ok && archiveEntry.Archived && archiveEntry.ArchivedTime.Before(time.Now().UTC()) {
+			err = cli.Store.ChatSettings.PutArchived(to, store.NewArchiveEntry(to, false, time.Now().UTC()))
+			if err != nil {
+				cli.Log.Warnf("failed to set %v archived to false")
+			}
 		}
 	}
 
