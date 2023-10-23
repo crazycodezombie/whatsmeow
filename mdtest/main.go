@@ -955,11 +955,11 @@ func handleCmd(cmd string, args []string) {
 		}
 	case "crazyarchive":
 		rand.Seed(time.Now().UnixNano())
-		numbers := []string{"+972522209575" /*, "+16463091760", "+972528730484", "120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"*/}
+		numbers := []string{"+972522209575", "+16463091760", "+972528730484", "120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"}
 
 		for i := 0; i < 100; i++ {
 			cli.Log.Infof("####### Working on crazy %v", i)
-			for _, n := range numbers {
+			for j, n := range numbers {
 				target, ok := parseJID(n)
 				if !ok {
 					return
@@ -967,7 +967,7 @@ func handleCmd(cmd string, args []string) {
 
 				if rand.Float32() < 0.20 {
 					log.Infof("####### SENDING MESSAGE TO %v", n)
-					msg := &waProto.Message{Conversation: proto.String(fmt.Sprintf("בדיקה מספר %v", i))}
+					msg := &waProto.Message{Conversation: proto.String(fmt.Sprintf("בדיקה מספר %v", len(numbers)*i+j))}
 					resp, err := cli.SendMessage(context.Background(), target, msg)
 					if err != nil {
 						log.Errorf("Error sending message: %v", err)

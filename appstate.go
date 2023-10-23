@@ -438,6 +438,8 @@ func (cli *Client) SendAppState(patch appstate.PatchInfo) error {
 	if err != nil {
 		return err
 	}
+	cli.Log.Infof("%v version is %v", patch.Type, version)
+
 	// TODO create new key instead of reusing the primary client's keys
 	latestKeyID, err := cli.Store.AppStateKeys.GetLatestAppStateSyncKeyID()
 	if err != nil {
