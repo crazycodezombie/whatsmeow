@@ -404,21 +404,21 @@ func handleCmd(cmd string, args []string) {
 		} else {
 			log.Infof("Got info: %+v", meta)
 		}
-	case "livesubscribenewsletter":
-		if len(args) < 1 {
-			log.Errorf("Usage: livesubscribenewsletter <jid>")
-			return
-		}
-		jid, ok := parseJID(args[0])
-		if !ok {
-			return
-		}
-		dur, err := cli.SubscribeNewsletterLiveUpdates(context.TODO(), jid)
-		if err != nil {
-			log.Errorf("Failed to subscribe to live updates: %v", err)
-		} else {
-			log.Infof("Subscribed to live updates for %s for %s", jid, dur)
-		}
+	//case "livesubscribenewsletter":
+	//	if len(args) < 1 {
+	//		log.Errorf("Usage: livesubscribenewsletter <jid>")
+	//		return
+	//	}
+	//	jid, ok := parseJID(args[0])
+	//	if !ok {
+	//		return
+	//	}
+	//	dur, err := cli.SubscribeNewsletterLiveUpdates(context.TODO(), jid)
+	//	if err != nil {
+	//		log.Errorf("Failed to subscribe to live updates: %v", err)
+	//	} else {
+	//		log.Infof("Subscribed to live updates for %s for %s", jid, dur)
+	//	}
 	case "getnewslettermessages":
 		if len(args) < 1 {
 			log.Errorf("Usage: getnewslettermessages <jid> [count] [before id]")
@@ -453,17 +453,17 @@ func handleCmd(cmd string, args []string) {
 				log.Infof("%d: %+v (viewed %d times)", msg.MessageServerID, msg.Message, msg.ViewsCount)
 			}
 		}
-	case "createnewsletter":
-		if len(args) < 1 {
-			log.Errorf("Usage: createnewsletter <name>")
-			return
-		}
-		err := cli.CreateNewsletter(strings.Join(args, " "), "")
-		if err != nil {
-			log.Errorf("Failed to create newsletter: %v", err)
-		} else {
-			log.Infof("Created newsletter?")
-		}
+	//case "createnewsletter":
+	//	if len(args) < 1 {
+	//		log.Errorf("Usage: createnewsletter <name>")
+	//		return
+	//	}
+	//	err := cli.CreateNewsletter(strings.Join(args, " "), "")
+	//	if err != nil {
+	//		log.Errorf("Failed to create newsletter: %v", err)
+	//	} else {
+	//		log.Infof("Created newsletter?")
+	//	}
 	case "getavatar":
 		if len(args) < 1 {
 			log.Errorf("Usage: getavatar <jid> [existing ID] [--preview] [--community]")
@@ -824,11 +824,11 @@ func handleCmd(cmd string, args []string) {
 		}
 	case "crazyarchive":
 		rand.Seed(time.Now().UnixNano())
-		numbers := []string{"+972522209575" /*, "+16463091760", "+972528730484", "120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"*/}
+		numbers := []string{"+972522209575", "+16463091760", "+972528730484", "120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"}
 
 		for i := 0; i < 100; i++ {
 			cli.Log.Infof("####### Working on crazy %v", i)
-			for _, n := range numbers {
+			for j, n := range numbers {
 				target, ok := parseJID(n)
 				if !ok {
 					return
@@ -836,7 +836,7 @@ func handleCmd(cmd string, args []string) {
 
 				if rand.Float32() < 0.20 {
 					log.Infof("####### SENDING MESSAGE TO %v", n)
-					msg := &waProto.Message{Conversation: proto.String(fmt.Sprintf("בדיקה מספר %v", i))}
+					msg := &waProto.Message{Conversation: proto.String(fmt.Sprintf("בדיקה מספר %v", len(numbers)*i+j))}
 					resp, err := cli.SendMessage(context.Background(), target, msg)
 					if err != nil {
 						log.Errorf("Error sending message: %v", err)
