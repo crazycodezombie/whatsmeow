@@ -77,6 +77,7 @@ type ContactEntry struct {
 	JID       types.JID
 	FirstName string
 	FullName  string
+	Exists    bool
 }
 
 type ContactStore interface {

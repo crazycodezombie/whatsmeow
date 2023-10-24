@@ -649,7 +649,7 @@ func handleCmd(cmd string, args []string) {
 			}
 		}
 
-		log.Infof("contacts len is %v", len(onlyPhoneContacts))
+		//log.Infof("contacts len is %v", len(onlyPhoneContacts))
 		//for _, cc := range onlyPhoneContacts {
 		//	log.Infof(cc.FullName)
 		//}
@@ -824,9 +824,9 @@ func handleCmd(cmd string, args []string) {
 		}
 	case "crazyarchive":
 		rand.Seed(time.Now().UnixNano())
-		numbers := []string{"+972522209575", "+16463091760", "+972528730484", "120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"}
+		numbers := []string{"120363168773995009@g.us", "120363183536268844@g.us", "120363166307214265@g.us", "120363166974715894@g.us", "120363185955644749@g.us", "120363166054999058@g.us", "120363165864004212@g.us", "120363184315951160@g.us", "120363183231651184@g.us"}
 
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 1000; i++ {
 			cli.Log.Infof("####### Working on crazy %v", i)
 			for j, n := range numbers {
 				target, ok := parseJID(n)
@@ -860,7 +860,7 @@ func handleCmd(cmd string, args []string) {
 					log.Errorf("Error changing chat's archive state: %v", err)
 				}
 
-				time.Sleep(1100 * time.Millisecond)
+				time.Sleep(2000 * time.Millisecond)
 			}
 		}
 
