@@ -53,6 +53,7 @@ func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, only
 	hasMore := true
 	wantSnapshot := fullSync
 	archivesMap := make(map[types.JID]store.ArchivedEntry)
+	contactsMap := make(map[types.JID]store.ContactEntry)
 	for hasMore {
 		patches, err := cli.fetchAppStatePatches(name, state.Version, wantSnapshot)
 		wantSnapshot = false
@@ -68,17 +69,10 @@ func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, only
 			}
 			return fmt.Errorf("failed to decode app state %s patches: %w", name, err)
 		}
-		wasFullSync := state.Version == 0 && patches.Snapshot != nil
 		state = newState
-		if name == appstate.WAPatchCriticalUnblockLow && wasFullSync && !cli.EmitAppStateEventsOnFullSync {
-			var contacts []store.ContactEntry
-			mutations, contacts = cli.filterContacts(mutations)
-			cli.Log.Infof("Mass inserting app state snapshot with %d contacts into the store", len(contacts))
-			err = cli.Store.Contacts.PutAllContactNames(contacts)
-			if err != nil {
-				// This is a fairly serious failure, so just abort the whole thing
-				return fmt.Errorf("failed to update contact store with data from snapshot: %v", err)
-			}
+
+		if name == appstate.WAPatchCriticalUnblockLow {
+			cli.filterContacts(mutations, contactsMap)
 		}
 
 		if name == appstate.WAPatchRegularLow {
@@ -87,6 +81,19 @@ func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, only
 
 		for _, mutation := range mutations {
 			cli.dispatchAppState(mutation, fullSync, cli.EmitAppStateEventsOnFullSync)
+		}
+	}
+
+	if len(contactsMap) > 0 {
+		contacts := make([]store.ContactEntry, 0, len(contactsMap))
+		for _, contact := range contactsMap {
+			contacts = append(contacts, contact)
+		}
+
+		err = cli.Store.Contacts.PutAllContactNames(contacts)
+		if err != nil {
+			// This is a fairly serious failure, so just abort the whole thing
+			return fmt.Errorf("failed to update contact store: %v", err)
 		}
 	}
 
@@ -112,28 +119,28 @@ func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, only
 	return nil
 }
 
-func (cli *Client) filterContacts(mutations []appstate.Mutation) ([]appstate.Mutation, []store.ContactEntry) {
-	filteredMutations := mutations[:0]
-	contacts := make([]store.ContactEntry, 0, len(mutations))
+func (cli *Client) filterContacts(mutations []appstate.Mutation, out map[types.JID]store.ContactEntry) {
 	for _, mutation := range mutations {
 		if mutation.Index[0] == "contact" && len(mutation.Index) > 1 {
-			if mutation.Operation != waProto.SyncdMutation_SET {
-				cli.Log.Warnf("should never get %v in contact mutations for snapshot", mutation.Operation)
-				continue
-			}
-
 			jid, _ := types.ParseJID(mutation.Index[1])
-			act := mutation.Action.GetContactAction()
-			contacts = append(contacts, store.ContactEntry{
-				JID:       jid,
-				FirstName: act.GetFirstName(),
-				FullName:  act.GetFullName(),
-			})
-		} else {
-			filteredMutations = append(filteredMutations, mutation)
+
+			switch mutation.Operation {
+			case waProto.SyncdMutation_SET:
+				act := mutation.Action.GetContactAction()
+				out[jid] = store.ContactEntry{
+					JID:       jid,
+					FirstName: act.GetFirstName(),
+					FullName:  act.GetFullName(),
+					Exists:    true,
+				}
+			case waProto.SyncdMutation_REMOVE:
+				out[jid] = store.ContactEntry{
+					JID:    jid,
+					Exists: false,
+				}
+			}
 		}
 	}
-	return filteredMutations, contacts
 }
 
 func (cli *Client) getArchivesInfo(mutations []appstate.Mutation, out map[types.JID]store.ArchivedEntry) {
@@ -191,14 +198,10 @@ func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool
 		}
 	case appstate.IndexArchive:
 		act := mutation.Action.GetArchiveChatAction()
-		cli.Log.Infof("got archive for %v: %v", jid, act.Archived)
 		eventToDispatch = &events.Archive{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}
 	case appstate.IndexContact:
 		act := mutation.Action.GetContactAction()
 		eventToDispatch = &events.Contact{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}
-		if cli.Store.Contacts != nil {
-			storeUpdateError = cli.Store.Contacts.PutContactName(jid, act.GetFirstName(), act.GetFullName())
-		}
 	case appstate.IndexClearChat:
 		act := mutation.Action.GetClearChatAction()
 		eventToDispatch = &events.ClearChat{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}
