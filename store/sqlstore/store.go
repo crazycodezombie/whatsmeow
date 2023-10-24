@@ -45,7 +45,7 @@ type SQLStore struct {
 	contactCacheLock sync.Mutex
 
 	archivedCache     map[types.JID]*store.ArchivedEntry
-	archivedCacheLock sync.Mutex
+	archivedCacheLock sync.RWMutex
 }
 
 // NewSQLStore creates a new SQLStore with the given database container and user JID.
@@ -445,8 +445,9 @@ const (
 		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name, is_phone_contact) VALUES ($1, $2, $3, $4, TRUE)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET first_name=excluded.first_name, full_name=excluded.full_name
 	`
-	deleteContactNameQuery   = `DELETE FROM whatsmeow_contacts WHERE our_jid=$1 AND their_jid=$2`
-	putManyContactNamesQuery = `
+	deleteContactNameQuery      = `DELETE FROM whatsmeow_contacts WHERE our_jid=$1 AND their_jid=$2`
+	deleteManyContactNamesQuery = `DELETE FROM whatsmeow_contacts WHERE our_jid=$1 AND their_jid IN (%s)`
+	putManyContactNamesQuery    = `
 		INSERT INTO whatsmeow_contacts (our_jid, their_jid, first_name, full_name, is_phone_contact)
 		VALUES %s
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET first_name=excluded.first_name, full_name=excluded.full_name
@@ -546,6 +547,30 @@ func (s *SQLStore) DeleteContactName(user types.JID) error {
 const contactBatchSize = 300
 const archiveBatchSize = 300
 
+func (s *SQLStore) deleteContactNamesBatch(tx execable, contacts []store.ContactEntry) error {
+	values := make([]interface{}, 1, 1+len(contacts))
+	queryParts := make([]string, 0, len(contacts))
+	values[0] = s.JID
+	placeholderSyntax := "$%d"
+	if s.dialect == "sqlite3" {
+		placeholderSyntax = "?%d"
+	}
+	i := 0
+	for _, contact := range contacts {
+		if contact.JID.IsEmpty() {
+			s.log.Warnf("Empty contact info in mass insert: %+v", contact)
+			continue
+		}
+		values = append(values, contact.JID.String())
+		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, i+2))
+		i++
+	}
+	queryPartsStr := strings.Join(queryParts, ",")
+	ss := fmt.Sprintf(deleteManyContactNamesQuery, queryPartsStr)
+	_, err := tx.Exec(ss, values...)
+	return err
+}
+
 func (s *SQLStore) putContactNamesBatch(tx execable, contacts []store.ContactEntry) error {
 	values := make([]interface{}, 2, 2+len(contacts)*3)
 	queryParts := make([]string, 0, len(contacts))
@@ -556,19 +581,11 @@ func (s *SQLStore) putContactNamesBatch(tx execable, contacts []store.ContactEnt
 		placeholderSyntax = "(?1, ?%d, ?%d, ?%d, ?2)"
 	}
 	i := 0
-	handledContacts := make(map[types.JID]struct{}, len(contacts))
 	for _, contact := range contacts {
 		if contact.JID.IsEmpty() {
 			s.log.Warnf("Empty contact info in mass insert: %+v", contact)
 			continue
 		}
-		// The whole query will break if there are duplicates, so make sure there aren't any duplicates
-		_, alreadyHandled := handledContacts[contact.JID]
-		if alreadyHandled {
-			s.log.Warnf("Duplicate contact info for %s in mass insert", contact.JID)
-			continue
-		}
-		handledContacts[contact.JID] = struct{}{}
 		baseIndex := i*3 + 2
 		values = append(values, contact.JID.String(), contact.FirstName, contact.FullName)
 		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, baseIndex+1, baseIndex+2, baseIndex+3))
@@ -578,7 +595,42 @@ func (s *SQLStore) putContactNamesBatch(tx execable, contacts []store.ContactEnt
 	return err
 }
 
-func (s *SQLStore) PutAllContactNames(contacts []store.ContactEntry) error {
+func (s *SQLStore) deleteContacts(contacts []store.ContactEntry) error {
+	s.log.Infof("deleting %v contacts to the db", len(contacts))
+	if len(contacts) > contactBatchSize {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		for i := 0; i < len(contacts); i += contactBatchSize {
+			var contactSlice []store.ContactEntry
+			if len(contacts) > i+contactBatchSize {
+				contactSlice = contacts[i : i+contactBatchSize]
+			} else {
+				contactSlice = contacts[i:]
+			}
+			err = s.deleteContactNamesBatch(tx, contactSlice)
+			if err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	} else if len(contacts) > 0 {
+		err := s.deleteContactNamesBatch(s.db, contacts)
+		if err != nil {
+			return err
+		}
+	} else {
+		return nil
+	}
+	return nil
+}
+
+func (s *SQLStore) updateContacts(contacts []store.ContactEntry) error {
 	s.log.Infof("inserting %v contacts to the db", len(contacts))
 	if len(contacts) > contactBatchSize {
 		tx, err := s.db.Begin()
@@ -610,11 +662,26 @@ func (s *SQLStore) PutAllContactNames(contacts []store.ContactEntry) error {
 	} else {
 		return nil
 	}
-	s.contactCacheLock.Lock()
-	// Just clear the cache, fetching pushnames and business names would be too much effort
-	s.contactCache = make(map[types.JID]*types.ContactInfo)
-	s.contactCacheLock.Unlock()
 	return nil
+}
+
+func (s *SQLStore) PutAllContactNames(contacts []store.ContactEntry) error {
+	upsertContacts, deleteContacts := make([]store.ContactEntry, 0), make([]store.ContactEntry, 0)
+
+	for _, contact := range contacts {
+		if contact.Exists {
+			upsertContacts = append(upsertContacts, contact)
+		} else {
+			deleteContacts = append(deleteContacts, contact)
+		}
+	}
+
+	err := s.updateContacts(upsertContacts)
+	if err != nil {
+		return err
+	}
+
+	return s.deleteContacts(deleteContacts)
 }
 
 func (s *SQLStore) getContact(user types.JID) (*types.ContactInfo, error) {
@@ -805,10 +872,13 @@ func (s *SQLStore) PutAllArchives(archives []store.ArchivedEntry) error {
 }
 
 func (s *SQLStore) GetChatSettingsArchived(chat types.JID) (archiveEntry store.ArchivedEntry, ok bool, err error) {
+	s.archivedCacheLock.RLock()
 	cached, ok := s.archivedCache[chat]
 	if ok {
+		defer s.archivedCacheLock.RUnlock()
 		return *cached, true, nil
 	}
+	s.archivedCacheLock.RUnlock()
 
 	s.archivedCacheLock.Lock()
 	s.archivedCacheLock.Unlock()
