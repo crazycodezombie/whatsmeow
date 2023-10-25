@@ -890,14 +890,14 @@ func (s *SQLStore) GetChatSettingsArchived(chat types.JID) (archiveEntry store.A
 			return store.ArchivedEntry{}, false, nil
 		}
 
-		return
+		return store.ArchivedEntry{}, false, err
 	}
 
 	archiveEntry.JID = chat
 	archiveEntry.ArchivedTime = time.UnixMilli(archiveTimestamp)
 	s.archivedCache[chat] = &archiveEntry
 
-	return
+	return archiveEntry, true, nil
 }
 
 func (s *SQLStore) GetChatSettings(chat types.JID) (settings types.LocalChatSettings, err error) {
