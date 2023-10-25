@@ -212,21 +212,6 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waPro
 		return
 	}
 
-	if cli.Store.UnarchiveChatsSettings {
-		archiveEntry, ok, err := cli.Store.ChatSettings.GetChatSettingsArchived(to)
-		if err != nil {
-			cli.Log.Warnf("unable to determine archive status of %v due to %v", to, err)
-		}
-
-		cli.Log.Infof("@@@@@@@@@@ @@@@@@@@@ ok=%v, archive=%v t1=%v t2=%v t3=%v", ok, archiveEntry.Archived, archiveEntry.ArchivedTime, time.Now(), time.Now().UTC())
-		if ok && archiveEntry.Archived && archiveEntry.ArchivedTime.Before(time.Now().UTC()) {
-			err = cli.Store.ChatSettings.PutArchived(to, store.NewArchiveEntry(to, false, time.Now().UTC()))
-			if err != nil {
-				cli.Log.Warnf("failed to set %v archived to false")
-			}
-		}
-	}
-
 	var respNode *waBinary.Node
 	var timeoutChan <-chan time.Time
 	if req.Timeout > 0 {
@@ -267,6 +252,21 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waPro
 		cli.groupParticipantsCacheLock.Lock()
 		delete(cli.groupParticipantsCache, to)
 		cli.groupParticipantsCacheLock.Unlock()
+	}
+
+	if err == nil && cli.Store.UnarchiveChatsSettings {
+		archiveEntry, ok, err := cli.Store.ChatSettings.GetChatSettingsArchived(to)
+		if err != nil {
+			cli.Log.Warnf("unable to determine archive status of %v due to %v", to, err)
+		}
+
+		cli.Log.Infof("@@@@@@@@@@ @@@@@@@@@ ok=%v, archive=%v t1=%v t2=%v t3=%v", ok, archiveEntry.Archived, archiveEntry.ArchivedTime, resp.Timestamp, time.Now().UTC())
+		if ok && archiveEntry.Archived && archiveEntry.ArchivedTime.Before(time.Now().UTC()) {
+			err = cli.Store.ChatSettings.PutArchived(to, store.NewArchiveEntry(to, false, time.Now().UTC()))
+			if err != nil {
+				cli.Log.Warnf("failed to set %v archived to false")
+			}
+		}
 	}
 	return
 }
