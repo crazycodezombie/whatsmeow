@@ -85,34 +85,38 @@ func BuildPin(target types.JID, pin bool) PatchInfo {
 // The last message timestamp and last message key are optional and can be set to zero values (`time.Time{}` and `nil`).
 //
 // Archiving a chat will also unpin it automatically.
-func BuildArchive(target types.JID, archive bool, lastMessageTimestamp time.Time, lastMessageKey *waProto.MessageKey) PatchInfo {
+func BuildArchive(targets []types.JID, archive bool, lastMessageTimestamp time.Time, lastMessageKey *waProto.MessageKey) PatchInfo {
 	if lastMessageTimestamp.IsZero() {
 		lastMessageTimestamp = time.Now()
 	}
-	archiveMutationInfo := MutationInfo{
-		Index:   []string{IndexArchive, target.String()},
-		Version: 3,
-		Value: &waProto.SyncActionValue{
-			ArchiveChatAction: &waProto.ArchiveChatAction{
-				Archived: &archive,
-				MessageRange: &waProto.SyncActionMessageRange{
-					LastMessageTimestamp: proto.Int64(lastMessageTimestamp.Unix()),
-					// TODO set LastSystemMessageTimestamp?
+
+	mutations := make([]MutationInfo, 0)
+	for _, target := range targets {
+		archiveMutationInfo := MutationInfo{
+			Index:   []string{IndexArchive, target.String()},
+			Version: 3,
+			Value: &waProto.SyncActionValue{
+				ArchiveChatAction: &waProto.ArchiveChatAction{
+					Archived: &archive,
+					MessageRange: &waProto.SyncActionMessageRange{
+						LastMessageTimestamp: proto.Int64(lastMessageTimestamp.Unix()),
+						// TODO set LastSystemMessageTimestamp?
+					},
 				},
 			},
-		},
-	}
+		}
 
-	if lastMessageKey != nil {
-		archiveMutationInfo.Value.ArchiveChatAction.MessageRange.Messages = []*waProto.SyncActionMessage{{
-			Key:       lastMessageKey,
-			Timestamp: proto.Int64(lastMessageTimestamp.Unix()),
-		}}
-	}
+		if lastMessageKey != nil {
+			archiveMutationInfo.Value.ArchiveChatAction.MessageRange.Messages = []*waProto.SyncActionMessage{{
+				Key:       lastMessageKey,
+				Timestamp: proto.Int64(lastMessageTimestamp.Unix()),
+			}}
+		}
 
-	mutations := []MutationInfo{archiveMutationInfo}
-	if archive {
-		mutations = append(mutations, newPinMutationInfo(target, false))
+		mutations = append(mutations, archiveMutationInfo)
+		if archive {
+			mutations = append(mutations, newPinMutationInfo(target, false))
+		}
 	}
 
 	result := PatchInfo{
