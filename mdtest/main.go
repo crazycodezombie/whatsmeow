@@ -796,31 +796,39 @@ func handleCmd(cmd string, args []string) {
 		}
 	case "archive":
 		if len(args) < 2 {
-			log.Errorf("Usage: archive <jid> <action>")
+			log.Errorf("Usage: archive <action> <jid1> <jid2> <jid3> ...]")
 			return
 		}
-		target, ok := parseJID(args[0])
-		if !ok {
-			return
-		}
-		action, err := strconv.ParseBool(args[1])
+
+		action, err := strconv.ParseBool(args[0])
 		if err != nil {
 			log.Errorf("invalid second argument: %v", err)
 			return
 		}
 
-		settings, err := cli.Store.ChatSettings.GetChatSettings(target)
-		if err != nil {
-			log.Errorf("invalid second argument: %v", err)
-			return
-		}
-		if !settings.Found || action != settings.Archived {
-			err = cli.SendAppState(appstate.BuildArchive(target, action, time.Time{}, nil))
-			if err != nil {
-				log.Errorf("Error changing chat's archive state: %v", err)
+		targets := make([]types.JID, 0)
+		for _, jid := range args[1:] {
+			target, ok := parseJID(jid)
+			if !ok {
+				return
 			}
-		} else {
-			log.Infof("already archived=%v", action)
+
+			settings, err := cli.Store.ChatSettings.GetChatSettings(target)
+			if err != nil {
+				log.Errorf("unable to get settings for %v: %v", target, err)
+				return
+			}
+
+			if !settings.Found || action != settings.Archived {
+				targets = append(targets, target)
+			} else {
+				log.Infof("already archived=%v", action)
+			}
+		}
+
+		err = cli.SendAppState(appstate.BuildArchive(targets, action, time.Time{}, nil))
+		if err != nil {
+			log.Errorf("Error changing chat's archive state: %v", err)
 		}
 	case "crazyarchive":
 		rand.Seed(time.Now().UnixNano())
@@ -855,7 +863,7 @@ func handleCmd(cmd string, args []string) {
 
 				action := !settings.Found || !settings.Archived
 				log.Infof("####### GOING TO SET %v ARCHIVE TO %v", n, action)
-				err = cli.SendAppState(appstate.BuildArchive(target, action, time.Time{}, nil))
+				err = cli.SendAppState(appstate.BuildArchive([]types.JID{target}, action, time.Time{}, nil))
 				if err != nil {
 					log.Errorf("Error changing chat's archive state: %v", err)
 				}
