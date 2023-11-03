@@ -21,6 +21,11 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 )
 
+const (
+	fetchAppStateRetries               = 5
+	fetchAppStateSecondsBetweenRetries = 30
+)
+
 // FetchAppState fetches updates to the given type of app state. If fullSync is true, the current
 // cached state will be removed and all app state patches will be re-fetched from the server.
 func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
@@ -32,6 +37,24 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 }
 
 func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
+	var err error
+	for i := 0; i < fetchAppStateRetries; i++ {
+		err = cli.actualFetchAppStateNoLock(name, fullSync, onlyIfNotSynced)
+		if err == nil {
+			return nil
+		}
+
+		cli.Log.Warnf("error fetching %v appstate in try number %v: %v", name, i, err)
+		if i+1 < fetchAppStateRetries {
+			cli.Log.Infof("sleeping %v seconds and retry fetching %v appstate", fetchAppStateSecondsBetweenRetries, name)
+			time.Sleep(fetchAppStateSecondsBetweenRetries * time.Second)
+		}
+	}
+
+	return err
+}
+
+func (cli *Client) actualFetchAppStateNoLock(name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
 	if fullSync {
 		err := cli.Store.AppState.DeleteAppStateVersion(string(name))
 		if err != nil {
@@ -425,18 +448,7 @@ func (cli *Client) requestAppStateKeys(ctx context.Context, rawKeyIDs [][]byte) 
 	}
 }
 
-// SendAppState sends the given app state patch, then resyncs that app state type from the server
-// to update local caches and send events for the updates.
-//
-// You can use the Build methods in the appstate package to build the parameter for this method, e.g.
-//
-//	cli.SendAppState(appstate.BuildMute(targetJID, true, 24 * time.Hour))
-func (cli *Client) SendAppState(patch appstate.PatchInfo) error {
-	cli.appStateSyncLock.Lock()
-	cli.Log.Infof("starting setting %v app state", patch.Type)
-	defer func() { cli.Log.Infof("done setting %v app state", patch.Type) }()
-	defer cli.appStateSyncLock.Unlock()
-
+func (cli *Client) actualSendAppState(patch appstate.PatchInfo) error {
 	version, hash, err := cli.Store.AppState.GetAppStateVersion(string(patch.Type))
 	if err != nil {
 		return err
@@ -490,4 +502,29 @@ func (cli *Client) SendAppState(patch appstate.PatchInfo) error {
 	}
 
 	return cli.fetchAppStateNoLock(patch.Type, false, false)
+}
+
+// SendAppState sends the given app state patch, then resyncs that app state type from the server
+// to update local caches and send events for the updates.
+//
+// You can use the Build methods in the appstate package to build the parameter for this method, e.g.
+//
+//	cli.SendAppState(appstate.BuildMute(targetJID, true, 24 * time.Hour))
+func (cli *Client) SendAppState(patch appstate.PatchInfo) error {
+	cli.appStateSyncLock.Lock()
+	cli.Log.Infof("starting setting %v app state", patch.Type)
+	defer func() { cli.Log.Infof("done setting %v app state", patch.Type) }()
+	defer cli.appStateSyncLock.Unlock()
+
+	err := cli.actualSendAppState(patch)
+	if err == nil {
+		return nil
+	}
+
+	err = cli.fetchAppStateNoLock(patch.Type, false, false)
+	if err != nil {
+		return err
+	}
+
+	return cli.actualSendAppState(patch)
 }
