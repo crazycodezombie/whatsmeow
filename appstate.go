@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"go.mau.fi/whatsmeow/appstate"
@@ -75,6 +76,8 @@ func (cli *Client) actualFetchAppStateNoLock(name appstate.WAPatchName, fullSync
 
 	hasMore := true
 	wantSnapshot := fullSync
+	labelEditMap := make(map[int]store.LabelEditEntry)
+	labelContactsMap := make(map[int]map[types.JID]store.LabelContactEntry)
 	archivesMap := make(map[types.JID]store.ArchivedEntry)
 	contactsMap := make(map[types.JID]store.ContactEntry)
 	for hasMore {
@@ -100,6 +103,11 @@ func (cli *Client) actualFetchAppStateNoLock(name appstate.WAPatchName, fullSync
 
 		if name == appstate.WAPatchRegularLow {
 			cli.getArchivesInfo(mutations, archivesMap)
+		}
+
+		if name == appstate.WAPatchRegular {
+			cli.getLabelsInfo(mutations, labelEditMap)
+			cli.getLabelContactsInfo(mutations, labelContactsMap)
 		}
 
 		for _, mutation := range mutations {
@@ -130,6 +138,41 @@ func (cli *Client) actualFetchAppStateNoLock(name appstate.WAPatchName, fullSync
 		err = cli.Store.ChatSettings.PutAllArchives(archives)
 		if err != nil {
 			return fmt.Errorf("failed to update archive store with data from snapshot: %v", err)
+		}
+	}
+
+	if len(labelEditMap) > 0 {
+		labelEdits := make([]store.LabelEditEntry, 0, len(labelEditMap))
+		for _, labelEdit := range labelEditMap {
+			labelEdits = append(labelEdits, labelEdit)
+		}
+
+		cli.Log.Infof("Mass upserting %v labels edits", len(labelEdits))
+		err = cli.Store.Labels.PutAllLabels(labelEdits)
+		if err != nil {
+			return fmt.Errorf("failed to update labels store with data from snapshot: %v", err)
+		}
+
+		// if label was deleting, ignore all the label contacts updates
+		for labelID, labelEdit := range labelEditMap {
+			if _, ok := labelContactsMap[labelID]; ok && labelEdit.IsDeleted {
+				delete(labelContactsMap, labelID)
+			}
+		}
+	}
+
+	if len(labelContactsMap) > 0 {
+		labelContacts := make([]store.LabelContactEntry, 0)
+		for _, labelIDContacts := range labelContactsMap {
+			for _, labelContact := range labelIDContacts {
+				labelContacts = append(labelContacts, labelContact)
+			}
+		}
+
+		cli.Log.Infof("Mass upserting %v labels contacts", len(labelContacts))
+		err = cli.Store.Labels.PutAllLabelContacts(labelContacts)
+		if err != nil {
+			return fmt.Errorf("failed to update label contacts store with data from snapshot: %v", err)
 		}
 	}
 
@@ -183,6 +226,52 @@ func (cli *Client) getArchivesInfo(mutations []appstate.Mutation, out map[types.
 	}
 }
 
+func (cli *Client) getLabelsInfo(mutations []appstate.Mutation, out map[int]store.LabelEditEntry) {
+	for _, mutation := range mutations {
+		if mutation.Operation != waProto.SyncdMutation_SET {
+			continue
+		}
+
+		if mutation.Index[0] != appstate.IndexLabelEdit || len(mutation.Index) < 2 {
+			continue
+		}
+
+		labelID, _ := strconv.Atoi(mutation.Index[1])
+		labelEdit := mutation.Action.GetLabelEditAction()
+
+		labelEntry := store.LabelEditEntry{ID: labelID, IsDeleted: labelEdit.GetDeleted()}
+		if !labelEdit.GetDeleted() {
+			labelEntry.Name = labelEdit.GetName()
+			labelEntry.Color = int(labelEdit.GetColor())
+		}
+
+		out[labelID] = labelEntry
+	}
+}
+
+func (cli *Client) getLabelContactsInfo(mutations []appstate.Mutation, out map[int]map[types.JID]store.LabelContactEntry) {
+	for _, mutation := range mutations {
+		if mutation.Operation != waProto.SyncdMutation_SET {
+			continue
+		}
+
+		if mutation.Index[0] != appstate.IndexLabelContact || len(mutation.Index) < 3 {
+			continue
+		}
+
+		labelID, _ := strconv.Atoi(mutation.Index[1])
+		jid, _ := types.ParseJID(mutation.Index[2])
+		isLabeled := mutation.Action.GetLabelAssociationAction().GetLabeled()
+
+		if _, ok := out[labelID]; !ok {
+			out[labelID] = make(map[types.JID]store.LabelContactEntry)
+		}
+
+		labelContactEntry := store.LabelContactEntry{LabelID: labelID, JID: jid, IsLabeled: isLabeled}
+		out[labelID][jid] = labelContactEntry
+	}
+}
+
 func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
 	dispatchEvts := !fullSync || emitOnFullSync
 
@@ -222,6 +311,8 @@ func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool
 	case appstate.IndexArchive:
 		act := mutation.Action.GetArchiveChatAction()
 		eventToDispatch = &events.Archive{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}
+	case appstate.IndexLabelEdit:
+		cli.Log.Infof("Got label edit for name: %v", mutation.Action.GetLabelEditAction().GetName())
 	case appstate.IndexContact:
 		act := mutation.Action.GetContactAction()
 		eventToDispatch = &events.Contact{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}

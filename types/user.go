@@ -46,6 +46,15 @@ type ContactInfo struct {
 	BusinessName string
 }
 
+// LabelInfo contains the cached whatsapp label information.
+type LabelInfo struct {
+	Found bool
+
+	ID    int
+	Name  string
+	Color int
+}
+
 // LocalChatSettings contains the cached local settings for a chat.
 type LocalChatSettings struct {
 	Found bool
