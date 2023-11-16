@@ -49,6 +49,8 @@ const (
 	IndexSettingPushName       = "setting_pushName"
 	IndexSettingUnarchiveChats = "setting_unarchiveChats"
 	IndexUserStatusMute        = "userStatusMute"
+	IndexLabelEdit             = "label_edit"
+	IndexLabelContact          = "label_jid"
 )
 
 type Processor struct {

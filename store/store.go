@@ -90,6 +90,29 @@ type ContactStore interface {
 	GetAllContacts() (map[types.JID]types.ContactInfo, error)
 }
 
+type LabelEditEntry struct {
+	ID        int
+	Name      string
+	Color     int
+	IsDeleted bool
+}
+
+type LabelContactEntry struct {
+	JID       types.JID
+	LabelID   int
+	IsLabeled bool
+}
+
+type LabelsStore interface {
+	PutAllLabels(labelEdits []LabelEditEntry) error
+	GetLabel(id int) (*types.LabelInfo, error)
+	GetAllLabels() (map[int]types.LabelInfo, error)
+	GetLabelsContactsCounts() (map[int]int, error)
+
+	PutAllLabelContacts(labelContacts []LabelContactEntry) error
+	GetAllLabelContacts(id int, ids ...int) (map[int][]types.JID, error)
+}
+
 type ArchivedEntry struct {
 	JID          types.JID
 	Archived     bool
@@ -166,6 +189,7 @@ type Device struct {
 	AppStateKeys  AppStateSyncKeyStore
 	AppState      AppStateStore
 	Contacts      ContactStore
+	Labels        LabelsStore
 	ChatSettings  ChatSettingsStore
 	MsgSecrets    MsgSecretStore
 	PrivacyTokens PrivacyTokenStore
