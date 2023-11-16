@@ -46,6 +46,9 @@ type SQLStore struct {
 
 	archivedCache     map[types.JID]*store.ArchivedEntry
 	archivedCacheLock sync.RWMutex
+
+	labelsCache     map[int]types.LabelInfo
+	labelsCacheLock sync.Mutex
 }
 
 // NewSQLStore creates a new SQLStore with the given database container and user JID.
@@ -58,6 +61,7 @@ func NewSQLStore(c *Container, jid types.JID) *SQLStore {
 		JID:           jid.String(),
 		contactCache:  make(map[types.JID]*types.ContactInfo),
 		archivedCache: make(map[types.JID]*store.ArchivedEntry),
+		labelsCache:   make(map[int]types.LabelInfo),
 	}
 }
 
@@ -68,6 +72,7 @@ var _ store.SenderKeyStore = (*SQLStore)(nil)
 var _ store.AppStateSyncKeyStore = (*SQLStore)(nil)
 var _ store.AppStateStore = (*SQLStore)(nil)
 var _ store.ContactStore = (*SQLStore)(nil)
+var _ store.LabelsStore = (*SQLStore)(nil)
 
 const (
 	putIdentityQuery = `
@@ -544,8 +549,9 @@ func (s *SQLStore) DeleteContactName(user types.JID) error {
 	return err
 }
 
-const contactBatchSize = 300
-const archiveBatchSize = 300
+const (
+	defaultBatchSize = 300
+)
 
 func (s *SQLStore) deleteContactNamesBatch(tx execable, contacts []store.ContactEntry) error {
 	values := make([]interface{}, 1, 1+len(contacts))
@@ -597,15 +603,15 @@ func (s *SQLStore) putContactNamesBatch(tx execable, contacts []store.ContactEnt
 
 func (s *SQLStore) deleteContacts(contacts []store.ContactEntry) error {
 	s.log.Infof("deleting %v contacts to the db", len(contacts))
-	if len(contacts) > contactBatchSize {
+	if len(contacts) > defaultBatchSize {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to start transaction: %w", err)
 		}
-		for i := 0; i < len(contacts); i += contactBatchSize {
+		for i := 0; i < len(contacts); i += defaultBatchSize {
 			var contactSlice []store.ContactEntry
-			if len(contacts) > i+contactBatchSize {
-				contactSlice = contacts[i : i+contactBatchSize]
+			if len(contacts) > i+defaultBatchSize {
+				contactSlice = contacts[i : i+defaultBatchSize]
 			} else {
 				contactSlice = contacts[i:]
 			}
@@ -632,15 +638,15 @@ func (s *SQLStore) deleteContacts(contacts []store.ContactEntry) error {
 
 func (s *SQLStore) updateContacts(contacts []store.ContactEntry) error {
 	s.log.Infof("inserting %v contacts to the db", len(contacts))
-	if len(contacts) > contactBatchSize {
+	if len(contacts) > defaultBatchSize {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to start transaction: %w", err)
 		}
-		for i := 0; i < len(contacts); i += contactBatchSize {
+		for i := 0; i < len(contacts); i += defaultBatchSize {
 			var contactSlice []store.ContactEntry
-			if len(contacts) > i+contactBatchSize {
-				contactSlice = contacts[i : i+contactBatchSize]
+			if len(contacts) > i+defaultBatchSize {
+				contactSlice = contacts[i : i+defaultBatchSize]
 			} else {
 				contactSlice = contacts[i:]
 			}
@@ -682,6 +688,408 @@ func (s *SQLStore) PutAllContactNames(contacts []store.ContactEntry) error {
 	}
 
 	return s.deleteContacts(deleteContacts)
+}
+
+const (
+	deleteManyLabelsQuery = `DELETE FROM whatsmeow_labels WHERE our_jid=$1 AND label_id IN (%s)`
+	putManyLabelsQuery    = `
+		INSERT INTO whatsmeow_labels (our_jid, label_id, label_name, label_color)
+		VALUES %s
+		ON CONFLICT (our_jid, label_id) DO UPDATE SET label_name=excluded.label_name, label_color=excluded.label_color
+	`
+	getLabelQuery = `
+		SELECT label_name, label_color FROM whatsmeow_labels WHERE our_jid=$1 AND label_id=$2
+	`
+	getAllLabelsQuery = `
+		SELECT label_id, label_name, label_color FROM whatsmeow_labels WHERE our_jid=$1
+	`
+
+	deleteManyLabelContactsQuery = `DELETE FROM whatsmeow_label_contacts WHERE our_jid=$1 AND (label_id, their_jid) IN (%s)`
+	putManyLabelContactsQuery    = `
+		INSERT INTO whatsmeow_label_contacts (our_jid, label_id, their_jid)
+		VALUES %s
+		ON CONFLICT (our_jid, label_id, their_jid) DO NOTHING
+	`
+	getAllLabelContactsQuery = `
+		SELECT label_id, their_jid FROM whatsmeow_label_contacts WHERE our_jid=$1 AND label_id IN (%s)
+	`
+	getLabelsContactsCounts = `
+		SELECT label_id, COUNT(*) as contact_count FROM whatsmeow_label_contacts WHERE our_jid=$1 GROUP BY label_id;
+	`
+)
+
+func (s *SQLStore) deleteLabelsBatch(tx execable, labels []store.LabelEditEntry) error {
+	values := make([]interface{}, 1, 1+len(labels))
+	queryParts := make([]string, 0, len(labels))
+	values[0] = s.JID
+	placeholderSyntax := "$%d"
+	if s.dialect == "sqlite3" {
+		placeholderSyntax = "?%d"
+	}
+	i := 0
+	for _, label := range labels {
+		values = append(values, label.ID)
+		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, i+2))
+		i++
+	}
+	queryPartsStr := strings.Join(queryParts, ",")
+	ss := fmt.Sprintf(deleteManyLabelsQuery, queryPartsStr)
+	_, err := tx.Exec(ss, values...)
+	return err
+}
+
+func (s *SQLStore) deleteLabels(labels []store.LabelEditEntry) error {
+	s.log.Infof("deleting %v labels from the db", len(labels))
+	if len(labels) > defaultBatchSize {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		for i := 0; i < len(labels); i += defaultBatchSize {
+			var labelsSlice []store.LabelEditEntry
+			if len(labels) > i+defaultBatchSize {
+				labelsSlice = labels[i : i+defaultBatchSize]
+			} else {
+				labelsSlice = labels[i:]
+			}
+			err = s.deleteLabelsBatch(tx, labelsSlice)
+			if err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	} else if len(labels) > 0 {
+		err := s.deleteLabelsBatch(s.db, labels)
+		if err != nil {
+			return err
+		}
+	} else {
+		return nil
+	}
+	return nil
+}
+
+func (s *SQLStore) putLabelsBatch(tx execable, labels []store.LabelEditEntry) error {
+	values := make([]interface{}, 1, 1+len(labels)*3)
+	queryParts := make([]string, 0, len(labels))
+	values[0] = s.JID
+	placeholderSyntax := "($1, $%d, $%d, $%d)"
+	if s.dialect == "sqlite3" {
+		placeholderSyntax = "(?1, ?%d, ?%d, ?%d)"
+	}
+	i := 0
+	for _, label := range labels {
+		baseIndex := i*3 + 1
+		values = append(values, label.ID, label.Name, label.Color)
+		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, baseIndex+1, baseIndex+2, baseIndex+3))
+		i++
+	}
+	_, err := tx.Exec(fmt.Sprintf(putManyLabelsQuery, strings.Join(queryParts, ",")), values...)
+	return err
+}
+
+func (s *SQLStore) updateLabels(upsertLabels []store.LabelEditEntry) error {
+	s.log.Infof("inserting %v labels to the db", len(upsertLabels))
+	if len(upsertLabels) > defaultBatchSize {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		for i := 0; i < len(upsertLabels); i += defaultBatchSize {
+			var labelsSlice []store.LabelEditEntry
+			if len(upsertLabels) > i+defaultBatchSize {
+				labelsSlice = upsertLabels[i : i+defaultBatchSize]
+			} else {
+				labelsSlice = upsertLabels[i:]
+			}
+			err = s.putLabelsBatch(tx, labelsSlice)
+			if err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	} else if len(upsertLabels) > 0 {
+		err := s.putLabelsBatch(s.db, upsertLabels)
+		if err != nil {
+			return err
+		}
+	} else {
+		return nil
+	}
+	return nil
+}
+
+func (s *SQLStore) PutAllLabels(labelEdits []store.LabelEditEntry) error {
+	upsertLabels, deleteLabels := make([]store.LabelEditEntry, 0), make([]store.LabelEditEntry, 0)
+
+	for _, labelEdit := range labelEdits {
+		if labelEdit.IsDeleted {
+			deleteLabels = append(deleteLabels, labelEdit)
+		} else {
+			upsertLabels = append(upsertLabels, labelEdit)
+		}
+	}
+
+	err := s.updateLabels(upsertLabels)
+	if err != nil {
+		return err
+	}
+
+	return s.deleteLabels(deleteLabels)
+}
+
+func (s *SQLStore) getLabel(id int) (*types.LabelInfo, error) {
+	cached, ok := s.labelsCache[id]
+	if ok {
+		return &cached, nil
+	}
+
+	var color int
+	var name string
+	err := s.db.QueryRow(getLabelQuery, s.JID, id).Scan(&name, &color)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	info := types.LabelInfo{
+		Found: err == nil,
+		ID:    id,
+		Name:  name,
+		Color: color,
+	}
+	s.labelsCache[id] = info
+	return &info, nil
+}
+
+func (s *SQLStore) GetLabel(id int) (*types.LabelInfo, error) {
+	s.labelsCacheLock.Lock()
+	info, err := s.getLabel(id)
+	s.labelsCacheLock.Unlock()
+	if err != nil {
+		return &types.LabelInfo{}, err
+	}
+	return info, nil
+}
+
+func (s *SQLStore) GetAllLabels() (map[int]types.LabelInfo, error) {
+	s.labelsCacheLock.Lock()
+	defer s.labelsCacheLock.Unlock()
+
+	rows, err := s.db.Query(getAllLabelsQuery, s.JID)
+	if err != nil {
+		return nil, err
+	}
+	output := make(map[int]types.LabelInfo)
+	for rows.Next() {
+		var id, color int
+		var name string
+		err = rows.Scan(&id, &name, &color)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		info := types.LabelInfo{
+			Found: true,
+			ID:    id,
+			Name:  name,
+			Color: color,
+		}
+		output[id] = info
+		s.labelsCache[id] = info
+	}
+	return output, nil
+}
+
+func (s *SQLStore) GetLabelsContactsCounts() (map[int]int, error) {
+	rows, err := s.db.Query(getLabelsContactsCounts, s.JID)
+	if err != nil {
+		return nil, err
+	}
+	output := make(map[int]int)
+	for rows.Next() {
+		var id, count int
+		err = rows.Scan(&id, &count)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+		output[id] = count
+	}
+	return output, nil
+}
+
+func (s *SQLStore) deleteLabelContactsBatch(tx execable, labelContacts []store.LabelContactEntry) error {
+	values := make([]interface{}, 1, 1+len(labelContacts))
+	queryParts := make([]string, 0, len(labelContacts))
+	values[0] = s.JID
+	placeholderSyntax := "($%d, $%d)"
+	if s.dialect == "sqlite3" {
+		placeholderSyntax = "(?%d, ?%d)"
+	}
+	i := 0
+	for _, labelContact := range labelContacts {
+		values = append(values, labelContact.LabelID, labelContact.JID.String())
+		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, i+2, i+3))
+		i += 2
+	}
+	queryPartsStr := strings.Join(queryParts, ",")
+	ss := fmt.Sprintf(deleteManyLabelContactsQuery, queryPartsStr)
+	_, err := tx.Exec(ss, values...)
+	return err
+}
+
+func (s *SQLStore) deleteLabelContacts(labelContacts []store.LabelContactEntry) error {
+	s.log.Infof("deleting %v label contacts from the db", len(labelContacts))
+	if len(labelContacts) > defaultBatchSize {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		for i := 0; i < len(labelContacts); i += defaultBatchSize {
+			var labelContactsSlice []store.LabelContactEntry
+			if len(labelContacts) > i+defaultBatchSize {
+				labelContactsSlice = labelContacts[i : i+defaultBatchSize]
+			} else {
+				labelContactsSlice = labelContacts[i:]
+			}
+			err = s.deleteLabelContactsBatch(tx, labelContactsSlice)
+			if err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	} else if len(labelContacts) > 0 {
+		err := s.deleteLabelContactsBatch(s.db, labelContacts)
+		if err != nil {
+			return err
+		}
+	} else {
+		return nil
+	}
+	return nil
+}
+
+func (s *SQLStore) updateLabelContactsBatch(tx execable, labelContacts []store.LabelContactEntry) error {
+	values := make([]interface{}, 1, 1+len(labelContacts)*3)
+	queryParts := make([]string, 0, len(labelContacts))
+	values[0] = s.JID
+	placeholderSyntax := "($1, $%d, $%d)"
+	if s.dialect == "sqlite3" {
+		placeholderSyntax = "(?1, ?%d, ?%d)"
+	}
+	i := 0
+	for _, labelContact := range labelContacts {
+		baseIndex := i*2 + 1
+		values = append(values, labelContact.LabelID, labelContact.JID)
+		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, baseIndex+1, baseIndex+2))
+		i++
+	}
+	_, err := tx.Exec(fmt.Sprintf(putManyLabelContactsQuery, strings.Join(queryParts, ",")), values...)
+	return err
+}
+
+func (s *SQLStore) updateLabelContacts(labelContacts []store.LabelContactEntry) error {
+	s.log.Infof("inserting %v label contacts to the db", len(labelContacts))
+	if len(labelContacts) > defaultBatchSize {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to start transaction: %w", err)
+		}
+		for i := 0; i < len(labelContacts); i += defaultBatchSize {
+			var labelContactsSlice []store.LabelContactEntry
+			if len(labelContacts) > i+defaultBatchSize {
+				labelContactsSlice = labelContacts[i : i+defaultBatchSize]
+			} else {
+				labelContactsSlice = labelContacts[i:]
+			}
+			err = s.updateLabelContactsBatch(tx, labelContactsSlice)
+			if err != nil {
+				_ = tx.Rollback()
+				return err
+			}
+		}
+		err = tx.Commit()
+		if err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+	} else if len(labelContacts) > 0 {
+		err := s.updateLabelContactsBatch(s.db, labelContacts)
+		if err != nil {
+			return err
+		}
+	} else {
+		return nil
+	}
+	return nil
+}
+
+func (s *SQLStore) PutAllLabelContacts(labelContacts []store.LabelContactEntry) error {
+	upsertLabelContacts, deleteLabelContactss := make([]store.LabelContactEntry, 0), make([]store.LabelContactEntry, 0)
+
+	for _, labelContact := range labelContacts {
+		if labelContact.IsLabeled {
+			upsertLabelContacts = append(upsertLabelContacts, labelContact)
+		} else {
+			deleteLabelContactss = append(deleteLabelContactss, labelContact)
+		}
+	}
+
+	err := s.updateLabelContacts(upsertLabelContacts)
+	if err != nil {
+		return err
+	}
+
+	return s.deleteLabelContacts(deleteLabelContactss)
+}
+
+func (s *SQLStore) GetAllLabelContacts(id int, ids ...int) (map[int][]types.JID, error) {
+	ids = append(ids, id)
+
+	values := make([]interface{}, 1, 1+len(ids))
+	queryParts := make([]string, 0, len(ids))
+	values[0] = s.JID
+	placeholderSyntax := "$%d"
+	if s.dialect == "sqlite3" {
+		placeholderSyntax = "?%d"
+	}
+	i := 0
+	for _, labelID := range ids {
+		values = append(values, labelID)
+		queryParts = append(queryParts, fmt.Sprintf(placeholderSyntax, i+2))
+		i++
+	}
+	queryPartsStr := strings.Join(queryParts, ",")
+	queryStr := fmt.Sprintf(getAllLabelContactsQuery, queryPartsStr)
+
+	rows, err := s.db.Query(queryStr, values...)
+	if err != nil {
+		return nil, err
+	}
+	output := make(map[int][]types.JID)
+	for rows.Next() {
+		var labelID int
+		var jid types.JID
+		err = rows.Scan(&labelID, &jid)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+
+		if _, ok := output[labelID]; !ok {
+			output[labelID] = make([]types.JID, 0)
+		}
+
+		output[labelID] = append(output[labelID], jid)
+	}
+	return output, nil
 }
 
 func (s *SQLStore) getContact(user types.JID) (*types.ContactInfo, error) {
@@ -838,15 +1246,15 @@ func (s *SQLStore) PutAllArchives(archives []store.ArchivedEntry) error {
 	}
 
 	s.log.Infof("inserting %v archives to the db", len(archives))
-	if len(archives) > archiveBatchSize {
+	if len(archives) > defaultBatchSize {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return fmt.Errorf("failed to start transaction: %w", err)
 		}
-		for i := 0; i < len(archives); i += archiveBatchSize {
+		for i := 0; i < len(archives); i += defaultBatchSize {
 			var archivesSlice []store.ArchivedEntry
-			if len(archives) > i+archiveBatchSize {
-				archivesSlice = archives[i : i+archiveBatchSize]
+			if len(archives) > i+defaultBatchSize {
+				archivesSlice = archives[i : i+defaultBatchSize]
 			} else {
 				archivesSlice = archives[i:]
 			}

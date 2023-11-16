@@ -644,6 +644,51 @@ func handleCmd(cmd string, args []string) {
 		if err != nil {
 			log.Errorf("Failed to set disappearing timer: %v", err)
 		}
+	case "labels":
+		allLabels, err := cli.Store.Labels.GetAllLabels()
+		if err != nil {
+			log.Errorf("err fetching labels: %v", err)
+			return
+		}
+
+		labelsCounts, err := cli.Store.Labels.GetLabelsContactsCounts()
+		if err != nil {
+			log.Errorf("err fetching labels counts: %v", err)
+			return
+		}
+
+		for i, lbl := range allLabels {
+			lblCount, ok := labelsCounts[lbl.ID]
+			if !ok {
+				lblCount = 0
+			}
+			log.Infof("label %v: %+v Count = %v", i, lbl, lblCount)
+		}
+	case "labelcontacts":
+		if len(args) < 1 {
+			log.Errorf("Usage: labelContacts <id1> <id2> <id3> ...]")
+			return
+		}
+
+		labelIDs := make([]int, 0)
+		for _, labelIDStr := range args {
+			labelID, err := strconv.Atoi(labelIDStr)
+			if err != nil {
+				log.Errorf("invalid label id: %v", labelIDStr)
+				return
+			}
+
+			labelIDs = append(labelIDs, labelID)
+		}
+		allLabelContacts, err := cli.Store.Labels.GetAllLabelContacts(labelIDs[0], labelIDs[1:]...)
+		if err != nil {
+			log.Errorf("err fetching label contacts: %v", err)
+			return
+		}
+
+		for _, contact := range allLabelContacts {
+			log.Infof("%v", contact)
+		}
 	case "contactslen":
 		c, err := cli.Store.Contacts.GetAllContacts()
 		if err != nil {

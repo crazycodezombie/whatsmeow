@@ -130,6 +130,7 @@ func (c *Container) scanDevice(row scannable) (*store.Device, error) {
 	device.AppStateKeys = innerStore
 	device.AppState = innerStore
 	device.Contacts = innerStore
+	device.Labels = innerStore
 	device.ChatSettings = innerStore
 	device.MsgSecrets = innerStore
 	device.PrivacyTokens = innerStore
@@ -241,6 +242,7 @@ func (c *Container) PutDevice(device *store.Device) error {
 		device.AppStateKeys = innerStore
 		device.AppState = innerStore
 		device.Contacts = innerStore
+		device.Labels = innerStore
 		device.ChatSettings = innerStore
 		device.MsgSecrets = innerStore
 		device.PrivacyTokens = innerStore
