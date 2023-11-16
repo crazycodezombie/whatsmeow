@@ -260,7 +260,6 @@ func (cli *Client) SendMessage(ctx context.Context, to types.JID, message *waPro
 			cli.Log.Warnf("unable to determine archive status of %v due to %v", to, err)
 		}
 
-		cli.Log.Infof("@@@@@@@@@@ @@@@@@@@@ ok=%v, archive=%v t1=%v t2=%v t3=%v", ok, archiveEntry.Archived, archiveEntry.ArchivedTime, resp.Timestamp, time.Now().UTC())
 		if ok && archiveEntry.Archived && archiveEntry.ArchivedTime.Before(time.Now().UTC()) {
 			err = cli.Store.ChatSettings.PutArchived(to, store.NewArchiveEntry(to, false, time.Now().UTC()))
 			if err != nil {
