@@ -110,7 +110,7 @@ type LabelsStore interface {
 	GetLabelsContactsCounts() (map[int]int, error)
 
 	PutAllLabelContacts(labelContacts []LabelContactEntry) error
-	GetAllLabelContacts(id int, ids ...int) (map[int][]types.JID, error)
+	GetAllLabelContacts(id int, ids ...int) (map[int][]types.ContactInfoWithJID, error)
 }
 
 type ArchivedEntry struct {
