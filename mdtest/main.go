@@ -778,7 +778,7 @@ func handleCmd(cmd string, args []string) {
 		}
 
 		for _, contact := range allLabelContacts {
-			log.Infof("%v", contact)
+			log.Infof("%+v", contact)
 		}
 	case "contactslen":
 		c, err := cli.Store.Contacts.GetAllContacts()
@@ -789,9 +789,12 @@ func handleCmd(cmd string, args []string) {
 		onlyPhoneContacts := make(map[types.JID]types.ContactInfo)
 		for k, v := range c {
 			if v.IsPhoneContact {
+				log.Infof("#%v = %+v", k, v)
 				onlyPhoneContacts[k] = v
 			}
 		}
+
+		log.Infof("%v", len(onlyPhoneContacts))
 
 		//log.Infof("contacts len is %v", len(onlyPhoneContacts))
 		//for _, cc := range onlyPhoneContacts {

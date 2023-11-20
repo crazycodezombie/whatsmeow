@@ -458,11 +458,11 @@ const (
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET first_name=excluded.first_name, full_name=excluded.full_name
 	`
 	putPushNameQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, push_name, is_phone_contact) VALUES ($1, $2, $3, FALSE)
+		INSERT INTO whatsmeow_contacts (our_jid, their_jid, push_name) VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET push_name=excluded.push_name
 	`
 	putBusinessNameQuery = `
-		INSERT INTO whatsmeow_contacts (our_jid, their_jid, business_name, is_phone_contact) VALUES ($1, $2, $3, FALSE)
+		INSERT INTO whatsmeow_contacts (our_jid, their_jid, business_name) VALUES ($1, $2, $3)
 		ON CONFLICT (our_jid, their_jid) DO UPDATE SET business_name=excluded.business_name
 	`
 	getContactQuery = `
@@ -711,7 +711,22 @@ const (
 		ON CONFLICT (our_jid, label_id, their_jid) DO NOTHING
 	`
 	getAllLabelContactsQuery = `
-		SELECT label_id, their_jid FROM whatsmeow_label_contacts WHERE our_jid=$1 AND label_id IN (%s)
+		SELECT
+			wlc.label_id,
+			wlc.their_jid,
+			wc.first_name,
+			wc.full_name,
+			wc.push_name,
+			wc.business_name,
+			wc.is_phone_contact
+		FROM whatsmeow_label_contacts wlc
+		LEFT JOIN whatsmeow_contacts wc
+		ON
+			wlc.our_jid = wc.our_jid AND
+			wlc.their_jid = wc.their_jid
+		WHERE
+			wlc.our_jid = $1 AND
+			wlc.label_id IN (%s)
 	`
 	getLabelsContactsCounts = `
 		SELECT label_id, COUNT(*) as contact_count FROM whatsmeow_label_contacts WHERE our_jid=$1 GROUP BY label_id;
@@ -1051,7 +1066,7 @@ func (s *SQLStore) PutAllLabelContacts(labelContacts []store.LabelContactEntry) 
 	return s.deleteLabelContacts(deleteLabelContactss)
 }
 
-func (s *SQLStore) GetAllLabelContacts(id int, ids ...int) (map[int][]types.JID, error) {
+func (s *SQLStore) GetAllLabelContacts(id int, ids ...int) (map[int][]types.ContactInfoWithJID, error) {
 	ids = append(ids, id)
 
 	values := make([]interface{}, 1, 1+len(ids))
@@ -1074,20 +1089,32 @@ func (s *SQLStore) GetAllLabelContacts(id int, ids ...int) (map[int][]types.JID,
 	if err != nil {
 		return nil, err
 	}
-	output := make(map[int][]types.JID)
+	output := make(map[int][]types.ContactInfoWithJID)
 	for rows.Next() {
 		var labelID int
 		var jid types.JID
-		err = rows.Scan(&labelID, &jid)
+		var first, full, push, business sql.NullString
+		var isPhoneContact sql.NullBool
+		err = rows.Scan(&labelID, &jid, &first, &full, &push, &business, &isPhoneContact)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
 
 		if _, ok := output[labelID]; !ok {
-			output[labelID] = make([]types.JID, 0)
+			output[labelID] = make([]types.ContactInfoWithJID, 0)
 		}
 
-		output[labelID] = append(output[labelID], jid)
+		output[labelID] = append(output[labelID], types.ContactInfoWithJID{
+			JID: jid,
+			ContactInfo: types.ContactInfo{
+				Found:          true,
+				IsPhoneContact: isPhoneContact.Bool,
+				FirstName:      first.String,
+				FullName:       full.String,
+				PushName:       push.String,
+				BusinessName:   business.String,
+			},
+		})
 	}
 	return output, nil
 }
