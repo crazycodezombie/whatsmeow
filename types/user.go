@@ -46,6 +46,11 @@ type ContactInfo struct {
 	BusinessName string
 }
 
+type ContactInfoWithJID struct {
+	JID JID
+	ContactInfo
+}
+
 // LabelInfo contains the cached whatsapp label information.
 type LabelInfo struct {
 	Found bool
