@@ -152,18 +152,18 @@ func (cli *Client) actualFetchAppStateNoLock(name appstate.WAPatchName, fullSync
 		if err != nil {
 			return fmt.Errorf("failed to update labels store with data from snapshot: %v", err)
 		}
-
-		// if label was deleting, ignore all the label contacts updates
-		for labelID, labelEdit := range labelEditMap {
-			if _, ok := labelContactsMap[labelID]; ok && labelEdit.IsDeleted {
-				delete(labelContactsMap, labelID)
-			}
-		}
 	}
 
 	if len(labelContactsMap) > 0 {
 		labelContacts := make([]store.LabelContactEntry, 0)
-		for _, labelIDContacts := range labelContactsMap {
+		for lblID, labelIDContacts := range labelContactsMap {
+			if lblInfo, err := cli.Store.Labels.GetLabel(lblID); err != nil {
+				cli.Log.Warnf("skipping label contacts events due to error querying for label %v: %v", lblID, err)
+				continue
+			} else if !lblInfo.Found {
+				continue
+			}
+
 			for _, labelContact := range labelIDContacts {
 				labelContacts = append(labelContacts, labelContact)
 			}
