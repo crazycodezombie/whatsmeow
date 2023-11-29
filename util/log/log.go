@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const MaxPrintLength = 1000
+
 // Logger is a simple logger interface that can have subloggers for specific areas.
 type Logger interface {
 	Warnf(msg string, args ...interface{})
@@ -62,7 +64,15 @@ func (s *stdoutLogger) outputf(level, msg string, args ...interface{}) {
 		colorStart = colors[level]
 		colorReset = "\033[0m"
 	}
-	fmt.Printf("%s%s [%s %s] %s%s\n", time.Now().Format("15:04:05.000"), colorStart, s.mod, level, fmt.Sprintf(msg, args...), colorReset)
+
+	finalMsg := fmt.Sprintf(msg, args...)
+	for len(finalMsg) > MaxPrintLength {
+		fmt.Printf("%s%s [%s %s] %s%s\n", time.Now().Format("15:04:05.000"), colorStart, s.mod, level, finalMsg[:MaxPrintLength], colorReset)
+		finalMsg = finalMsg[MaxPrintLength:]
+	}
+	if len(finalMsg) > 0 {
+		fmt.Printf("%s%s [%s %s] %s%s\n", time.Now().Format("15:04:05.000"), colorStart, s.mod, level, finalMsg, colorReset)
+	}
 }
 
 func (s *stdoutLogger) Errorf(msg string, args ...interface{}) { s.outputf("ERROR", msg, args...) }
