@@ -381,7 +381,7 @@ func (cli *Client) handleHistorySyncNotification(notif *waProto.HistorySyncNotif
 		cli.dispatchEvent(&events.HistorySync{
 			Data: &historySync,
 		})
-		if historySync.GetSyncType() == waProto.HistorySync_RECENT && historySync.GetProgress() == 100 {
+		if /*historySync.GetSyncType() == waProto.HistorySync_RECENT && */ historySync.GetProgress() == 100 {
 			cli.dispatchEvent(&events.HistorySyncCompleted{})
 		}
 	}
