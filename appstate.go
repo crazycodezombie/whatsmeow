@@ -255,7 +255,7 @@ func (cli *Client) getLabelContactsInfo(mutations []appstate.Mutation, out map[i
 			continue
 		}
 
-		if mutation.Index[0] != appstate.IndexLabelContact || len(mutation.Index) < 3 {
+		if mutation.Index[0] != appstate.IndexLabelAssociationChat || len(mutation.Index) < 3 {
 			continue
 		}
 
@@ -311,8 +311,6 @@ func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool
 	case appstate.IndexArchive:
 		act := mutation.Action.GetArchiveChatAction()
 		eventToDispatch = &events.Archive{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}
-	case appstate.IndexLabelEdit:
-		cli.Log.Infof("Got label edit for name: %v", mutation.Action.GetLabelEditAction().GetName())
 	case appstate.IndexContact:
 		act := mutation.Action.GetContactAction()
 		eventToDispatch = &events.Contact{JID: jid, Timestamp: ts, Action: act, FromFullSync: fullSync}
