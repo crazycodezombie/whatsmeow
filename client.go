@@ -235,6 +235,24 @@ func NewClient(deviceStore *store.Device, log waLog.Logger, validateMACs bool) *
 	return cli
 }
 
+func (cli *Client) GotKeys() bool {
+	if cli.gotKeys {
+		return true
+	}
+
+	if cli.Store.ID != nil {
+		key, err := cli.Store.AppStateKeys.GetLatestAppStateSyncKeyID()
+		if err != nil {
+			cli.Log.Warnf("unable to check if we got keys (%v). returning false", err)
+			return false
+		}
+
+		cli.gotKeys = key != nil
+	}
+
+	return cli.gotKeys
+}
+
 // SetProxyAddress is a helper method that parses a URL string and calls SetProxy.
 //
 // Returns an error if url.Parse fails to parse the given address.
