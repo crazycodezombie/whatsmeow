@@ -43,6 +43,11 @@ type wrappedEventHandler struct {
 	id uint32
 }
 
+type HistNotificationData struct {
+	Info *types.MessageInfo
+	Msg  *waProto.Message
+}
+
 // Client contains everything necessary to connect to and interact with the WhatsApp web API.
 type Client struct {
 	Store   *store.Device
@@ -147,6 +152,9 @@ type Client struct {
 	http  *http.Client
 
 	validateMACs bool
+
+	gotKeys                  bool
+	waitingHistNotifications []HistNotificationData
 }
 
 // Size of buffer for the channel that all incoming XML nodes go through.
@@ -192,8 +200,8 @@ func NewClient(deviceStore *store.Device, log waLog.Logger, validateMACs bool) *
 		socketWait:      make(chan struct{}),
 
 		incomingRetryRequestCounter: make(map[incomingRetryKey]int),
-		groupParticipantsCache: make(map[types.JID][]types.JID),
-		userDevicesCache:       make(map[types.JID][]types.JID),
+		groupParticipantsCache:      make(map[types.JID][]types.JID),
+		userDevicesCache:            make(map[types.JID][]types.JID),
 
 		recentMessagesMap:      make(map[recentMessageKey]*waProto.Message, recentMessagesSize),
 		sessionRecreateHistory: make(map[types.JID]time.Time),
@@ -206,6 +214,9 @@ func NewClient(deviceStore *store.Device, log waLog.Logger, validateMACs bool) *
 		AutoTrustIdentity:     true,
 		DontSendSelfBroadcast: true,
 		validateMACs:          validateMACs,
+
+		gotKeys:                  false,
+		waitingHistNotifications: make([]HistNotificationData, 0),
 	}
 	cli.nodeHandlers = map[string]nodeHandler{
 		"message":      cli.handleEncryptedMessage,
