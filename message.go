@@ -442,12 +442,17 @@ func (cli *Client) handlePlaceholderResendResponse(msg *waProto.PeerDataOperatio
 	}
 }
 
-func (cli *Client) handleProtocolMessage(info *types.MessageInfo, msg *waProto.Message) {
+func (cli *Client) actualHandleProtocolMessage(info *types.MessageInfo, msg *waProto.Message) {
 	protoMsg := msg.GetProtocolMessage()
 
 	if protoMsg.GetHistorySyncNotification() != nil && info.IsFromMe {
-		cli.handleHistorySyncNotification(protoMsg.HistorySyncNotification)
-		cli.sendProtocolMessageReceipt(info.ID, types.ReceiptTypeHistorySync)
+		if cli.gotKeys {
+			cli.handleHistorySyncNotification(protoMsg.HistorySyncNotification)
+			cli.sendProtocolMessageReceipt(info.ID, types.ReceiptTypeHistorySync)
+		} else {
+			cli.Log.Infof("got history notification before keys. waiting for keys")
+			cli.waitingHistNotifications = append(cli.waitingHistNotifications, HistNotificationData{Info: info, Msg: msg})
+		}
 	}
 
 	if protoMsg.GetPeerDataOperationRequestResponseMessage().GetPeerDataOperationRequestType() == waProto.PeerDataOperationRequestType_PLACEHOLDER_MESSAGE_RESEND {
@@ -457,7 +462,20 @@ func (cli *Client) handleProtocolMessage(info *types.MessageInfo, msg *waProto.M
 	if protoMsg.GetAppStateSyncKeyShare() != nil && info.IsFromMe {
 		cli.Log.Infof("got app state sync keys message")
 		cli.handleAppStateSyncKeyShare(protoMsg.AppStateSyncKeyShare)
+		cli.gotKeys = true
 	}
+}
+
+func (cli *Client) handleProtocolMessage(info *types.MessageInfo, msg *waProto.Message) {
+	if len(cli.waitingHistNotifications) > 0 && cli.gotKeys {
+		cli.Log.Infof("now got keys. reading %v waited hist notifications", len(cli.waitingHistNotifications))
+		for _, not := range cli.waitingHistNotifications {
+			cli.actualHandleProtocolMessage(not.Info, not.Msg)
+		}
+		cli.waitingHistNotifications = make([]HistNotificationData, 0)
+	}
+
+	cli.actualHandleProtocolMessage(info, msg)
 
 	if info.Category == "peer" {
 		cli.sendProtocolMessageReceipt(info.ID, types.ReceiptTypePeerMsg)
