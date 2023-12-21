@@ -442,12 +442,15 @@ func (cli *Client) handlePlaceholderResendResponse(msg *waProto.PeerDataOperatio
 	}
 }
 
-func (cli *Client) actualHandleProtocolMessage(info *types.MessageInfo, msg *waProto.Message) {
+func (cli *Client) actualHandleProtocolMessage(info *types.MessageInfo, msg *waProto.Message, waited bool) {
 	protoMsg := msg.GetProtocolMessage()
 
 	if protoMsg.GetHistorySyncNotification() != nil && info.IsFromMe {
 		if cli.GotKeys() {
 			cli.handleHistorySyncNotification(protoMsg.HistorySyncNotification)
+			if !waited {
+				cli.sendProtocolMessageReceipt(info.ID, types.ReceiptTypeHistorySync)
+			}
 		} else {
 			cli.Log.Infof("got history notification before keys. waiting for keys")
 			cli.waitingHistNotifications = append(cli.waitingHistNotifications, HistNotificationData{Info: info, Msg: msg})
@@ -466,7 +469,7 @@ func (cli *Client) actualHandleProtocolMessage(info *types.MessageInfo, msg *waP
 		if len(cli.waitingHistNotifications) > 0 && cli.GotKeys() {
 			cli.Log.Infof("reading %v waited hist notifications", len(cli.waitingHistNotifications))
 			for _, not := range cli.waitingHistNotifications {
-				cli.actualHandleProtocolMessage(not.Info, not.Msg)
+				cli.actualHandleProtocolMessage(not.Info, not.Msg, true)
 			}
 			cli.waitingHistNotifications = make([]HistNotificationData, 0)
 		}
@@ -474,7 +477,7 @@ func (cli *Client) actualHandleProtocolMessage(info *types.MessageInfo, msg *waP
 }
 
 func (cli *Client) handleProtocolMessage(info *types.MessageInfo, msg *waProto.Message) {
-	cli.actualHandleProtocolMessage(info, msg)
+	cli.actualHandleProtocolMessage(info, msg, false)
 
 	if info.Category == "peer" {
 		cli.sendProtocolMessageReceipt(info.ID, types.ReceiptTypePeerMsg)
