@@ -415,6 +415,7 @@ func (cli *Client) handleAppStateSyncKeyShare(keys *waProto.AppStateSyncKeyShare
 	}
 	cli.appStateKeyRequestsLock.RUnlock()
 
+	cli.Log.Infof("going to fetch state, onlyifnotsynced = %v", onlyResyncIfNotSynced)
 	for _, name := range appstate.AllPatchNames {
 		err := cli.FetchAppState(name, false, onlyResyncIfNotSynced)
 		if err != nil {
