@@ -66,6 +66,9 @@ func (cli *Client) actualFetchAppStateNoLock(name appstate.WAPatchName, fullSync
 	if err != nil {
 		return fmt.Errorf("failed to get app state %s version: %w", name, err)
 	}
+
+	cli.Log.Infof("fetching app state for %v with fullSync=%v, onlyIfNotSynced=%v", fullSync || version == 0, onlyIfNotSynced)
+
 	if version == 0 {
 		fullSync = true
 	} else if onlyIfNotSynced {
