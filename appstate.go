@@ -39,18 +39,19 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 
 func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
 	var err error
-	for i := 0; i < fetchAppStateRetries; i++ {
-		err = cli.actualFetchAppStateNoLock(name, fullSync, onlyIfNotSynced)
-		if err == nil {
-			return nil
-		}
-
-		cli.Log.Warnf("error fetching %v appstate in try number %v: %v", name, i, err)
-		if i+1 < fetchAppStateRetries {
-			cli.Log.Infof("sleeping %v seconds and retry fetching %v appstate", fetchAppStateSecondsBetweenRetries, name)
-			time.Sleep(fetchAppStateSecondsBetweenRetries * time.Second)
-		}
+	//for i := 0; i < fetchAppStateRetries; i++ {
+	err = cli.actualFetchAppStateNoLock(name, fullSync, onlyIfNotSynced)
+	if err == nil {
+		return nil
 	}
+
+	cli.Log.Warnf("error fetching %v appstate: %v", name, err)
+	//cli.Log.Warnf("error fetching %v appstate in try number %v: %v", name, i, err)
+	//if i+1 < fetchAppStateRetries {
+	//	cli.Log.Infof("sleeping %v seconds and retry fetching %v appstate", fetchAppStateSecondsBetweenRetries, name)
+	//	time.Sleep(fetchAppStateSecondsBetweenRetries * time.Second)
+	//}
+	//}
 
 	return err
 }
