@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime/debug"
 	"time"
 
 	"go.mau.fi/libsignal/groups"
