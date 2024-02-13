@@ -9,9 +9,13 @@ package events
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
+	"go.mau.fi/whatsmeow/binary/armadillo/waConsumerApplication"
+	"go.mau.fi/whatsmeow/binary/armadillo/waMsgApplication"
+	"go.mau.fi/whatsmeow/binary/armadillo/waMsgTransport"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
 	"go.mau.fi/whatsmeow/types"
 )
@@ -142,6 +146,10 @@ const (
 	ConnectFailureClientOutdated ConnectFailureReason = 405
 	ConnectFailureBadUserAgent   ConnectFailureReason = 409
 
+	ConnectFailureCATExpired ConnectFailureReason = 413
+	ConnectFailureCATInvalid ConnectFailureReason = 414
+	ConnectFailureNotFound   ConnectFailureReason = 415
+
 	ConnectFailureInternalServerError ConnectFailureReason = 500
 	ConnectFailureExperimental        ConnectFailureReason = 501
 	ConnectFailureServiceUnavailable  ConnectFailureReason = 503
@@ -154,11 +162,17 @@ var connectFailureReasonMessage = map[ConnectFailureReason]string{
 	ConnectFailureUnknownLogout:  "logged out for unknown reason",
 	ConnectFailureClientOutdated: "client is out of date",
 	ConnectFailureBadUserAgent:   "client user agent was rejected",
+	ConnectFailureCATExpired:     "messenger crypto auth token has expired",
+	ConnectFailureCATInvalid:     "messenger crypto auth token is invalid",
 }
 
 // IsLoggedOut returns true if the client should delete session data due to this connect failure.
 func (cfr ConnectFailureReason) IsLoggedOut() bool {
 	return cfr == ConnectFailureLoggedOut || cfr == ConnectFailureMainDeviceGone || cfr == ConnectFailureUnknownLogout
+}
+
+func (cfr ConnectFailureReason) NumberString() string {
+	return strconv.Itoa(int(cfr))
 }
 
 // String returns the reason code and a short human-readable description of the error.
@@ -181,6 +195,8 @@ type ConnectFailure struct {
 
 // ClientOutdated is emitted when the WhatsApp server rejects the connection with the ConnectFailureClientOutdated code.
 type ClientOutdated struct{}
+
+type CATRefreshError struct{}
 
 // StreamError is emitted when the WhatsApp server sends a <stream:error> node with an unknown code.
 //
@@ -252,6 +268,17 @@ type Message struct {
 	// The raw message struct. This is the raw unmodified data, which means the actual message might
 	// be wrapped in DeviceSentMessage, EphemeralMessage or ViewOnceMessage.
 	RawMessage *waProto.Message
+}
+
+type FBConsumerMessage struct {
+	Info    types.MessageInfo                          // Information about the message like the chat and sender IDs
+	Message *waConsumerApplication.ConsumerApplication // The actual message struct
+
+	// If the message was re-requested from the sender, this is the number of retries it took.
+	RetryCount int
+
+	Transport   *waMsgTransport.MessageTransport     // The first level of wrapping the message was in
+	Application *waMsgApplication.MessageApplication // The second level of wrapping the message was in
 }
 
 // UnwrapRaw fills the Message, IsEphemeral and IsViewOnce fields based on the raw message in the RawMessage field.
