@@ -13,7 +13,7 @@ import (
 	"time"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
-	"go.mau.fi/whatsmeow/binary/armadillo/waConsumerApplication"
+	"go.mau.fi/whatsmeow/binary/armadillo"
 	"go.mau.fi/whatsmeow/binary/armadillo/waMsgApplication"
 	"go.mau.fi/whatsmeow/binary/armadillo/waMsgTransport"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
@@ -72,6 +72,22 @@ type KeepAliveTimeout struct {
 // KeepAliveRestored is emitted if the keepalive pings start working again after some KeepAliveTimeout events.
 // Note that if the websocket disconnects before the pings start working, this event will not be emitted.
 type KeepAliveRestored struct{}
+
+// PermanentDisconnect is a class of events emitted when the client will not auto-reconnect by default.
+type PermanentDisconnect interface {
+	PermanentDisconnectDescription() string
+}
+
+func (l *LoggedOut) PermanentDisconnectDescription() string     { return l.Reason.String() }
+func (*StreamReplaced) PermanentDisconnectDescription() string  { return "stream replaced" }
+func (*ClientOutdated) PermanentDisconnectDescription() string  { return "client outdated" }
+func (*CATRefreshError) PermanentDisconnectDescription() string { return "CAT refresh failed" }
+func (tb *TemporaryBan) PermanentDisconnectDescription() string {
+	return fmt.Sprintf("temporarily banned: %s", tb.String())
+}
+func (cf *ConnectFailure) PermanentDisconnectDescription() string {
+	return fmt.Sprintf("connect failure: %s", cf.Reason.String())
+}
 
 // LoggedOut is emitted when the client has been unpaired from the phone.
 //
@@ -270,9 +286,9 @@ type Message struct {
 	RawMessage *waProto.Message
 }
 
-type FBConsumerMessage struct {
-	Info    types.MessageInfo                          // Information about the message like the chat and sender IDs
-	Message *waConsumerApplication.ConsumerApplication // The actual message struct
+type FBMessage struct {
+	Info    types.MessageInfo               // Information about the message like the chat and sender IDs
+	Message armadillo.MessageApplicationSub // The actual message struct
 
 	// If the message was re-requested from the sender, this is the number of retries it took.
 	RetryCount int
