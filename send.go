@@ -31,6 +31,7 @@ import (
 
 	waBinary "go.mau.fi/whatsmeow/binary"
 	waProto "go.mau.fi/whatsmeow/binary/proto"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -312,8 +313,8 @@ func (cli *Client) RevokeMessage(chat types.JID, id types.MessageID) (SendRespon
 func (cli *Client) BuildMessageKey(chat, sender types.JID, id types.MessageID) *waProto.MessageKey {
 	key := &waProto.MessageKey{
 		FromMe:    proto.Bool(true),
-		Id:        proto.String(id),
-		RemoteJid: proto.String(chat.String()),
+		ID:        proto.String(id),
+		RemoteJID: proto.String(chat.String()),
 	}
 	if !sender.IsEmpty() && sender.User != cli.getOwnID().User {
 		key.FromMe = proto.Bool(false)
@@ -354,7 +355,7 @@ func (cli *Client) BuildReaction(chat, sender types.JID, id types.MessageID, rea
 		ReactionMessage: &waProto.ReactionMessage{
 			Key:               cli.BuildMessageKey(chat, sender, id),
 			Text:              proto.String(reaction),
-			SenderTimestampMs: proto.Int64(time.Now().UnixMilli()),
+			SenderTimestampMS: proto.Int64(time.Now().UnixMilli()),
 		},
 	}
 }
@@ -393,11 +394,11 @@ func (cli *Client) BuildHistorySyncRequest(lastKnownMessageInfo *types.MessageIn
 			PeerDataOperationRequestMessage: &waProto.PeerDataOperationRequestMessage{
 				PeerDataOperationRequestType: waProto.PeerDataOperationRequestType_HISTORY_SYNC_ON_DEMAND.Enum(),
 				HistorySyncOnDemandRequest: &waProto.PeerDataOperationRequestMessage_HistorySyncOnDemandRequest{
-					ChatJid:              proto.String(lastKnownMessageInfo.Chat.String()),
-					OldestMsgId:          proto.String(lastKnownMessageInfo.ID),
+					ChatJID:              proto.String(lastKnownMessageInfo.Chat.String()),
+					OldestMsgID:          proto.String(lastKnownMessageInfo.ID),
 					OldestMsgFromMe:      proto.Bool(lastKnownMessageInfo.IsFromMe),
 					OnDemandMsgCount:     proto.Int32(int32(count)),
-					OldestMsgTimestampMs: proto.Int64(lastKnownMessageInfo.Timestamp.UnixMilli()),
+					OldestMsgTimestampMS: proto.Int64(lastKnownMessageInfo.Timestamp.UnixMilli()),
 				},
 			},
 		},
@@ -420,12 +421,12 @@ func (cli *Client) BuildEdit(chat types.JID, id types.MessageID, newContent *waP
 				ProtocolMessage: &waProto.ProtocolMessage{
 					Key: &waProto.MessageKey{
 						FromMe:    proto.Bool(true),
-						Id:        proto.String(id),
-						RemoteJid: proto.String(chat.String()),
+						ID:        proto.String(id),
+						RemoteJID: proto.String(chat.String()),
 					},
 					Type:          waProto.ProtocolMessage_MESSAGE_EDIT.Enum(),
 					EditedMessage: newContent,
-					TimestampMs:   proto.Int64(time.Now().UnixMilli()),
+					TimestampMS:   proto.Int64(time.Now().UnixMilli()),
 				},
 			},
 		},
@@ -580,7 +581,7 @@ func (cli *Client) sendGroup(ctx context.Context, to, ownID types.JID, id types.
 	}
 	skdMessage := &waProto.Message{
 		SenderKeyDistributionMessage: &waProto.SenderKeyDistributionMessage{
-			GroupId:                             proto.String(to.String()),
+			GroupID:                             proto.String(to.String()),
 			AxolotlSenderKeyDistributionMessage: signalSKDMessage.Serialize(),
 		},
 	}
@@ -700,7 +701,7 @@ func getMediaTypeFromMessage(msg *waProto.Message) string {
 	case msg.DocumentMessage != nil:
 		return "document"
 	case msg.AudioMessage != nil:
-		if msg.AudioMessage.GetPtt() {
+		if msg.AudioMessage.GetPTT() {
 			return "ptt"
 		} else {
 			return "audio"
@@ -768,7 +769,7 @@ func getButtonAttributes(msg *waProto.Message) waBinary.Attrs {
 	case msg.ListMessage != nil:
 		return waBinary.Attrs{
 			"v":    "2",
-			"type": strings.ToLower(waProto.ListMessage_ListType_name[int32(msg.ListMessage.GetListType())]),
+			"type": strings.ToLower(waE2E.ListMessage_ListType_name[int32(msg.ListMessage.GetListType())]),
 		}
 	default:
 		return waBinary.Attrs{}
@@ -919,7 +920,7 @@ func marshalMessage(to types.JID, message *waProto.Message) (plaintext, dsmPlain
 	if to.Server != types.GroupServer && to.Server != types.NewsletterServer {
 		dsmPlaintext, err = proto.Marshal(&waProto.Message{
 			DeviceSentMessage: &waProto.DeviceSentMessage{
-				DestinationJid: proto.String(to.String()),
+				DestinationJID: proto.String(to.String()),
 				Message:        message,
 			},
 		})
