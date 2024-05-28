@@ -368,11 +368,11 @@ func (cli *Client) handleHistorySyncNotification(notif *waProto.HistorySyncNotif
 
 		if cli.Store.UnarchiveChatsSettings {
 			for _, conversation := range historySync.Conversations {
-				if conversation.Id == nil || len(conversation.Messages) == 0 {
+				if conversation.ID == nil || len(conversation.Messages) == 0 {
 					continue
 				}
 
-				jid, _ := types.ParseJID(*conversation.Id)
+				jid, _ := types.ParseJID(*conversation.ID)
 				message := conversation.Messages[0]
 
 				if message.GetMessage() == nil {
