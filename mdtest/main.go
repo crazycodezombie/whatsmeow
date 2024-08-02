@@ -1018,7 +1018,7 @@ func handleCmd(cmd string, args []string) {
 
 				if rand.Float32() < 0.20 {
 					log.Infof("####### SENDING MESSAGE TO %v", n)
-					msg := &waProto.Message{Conversation: proto.String(fmt.Sprintf("בדיקה מספר %v", len(numbers)*i+j))}
+					msg := &waE2E.Message{Conversation: proto.String(fmt.Sprintf("בדיקה מספר %v", len(numbers)*i+j))}
 					resp, err := cli.SendMessage(context.Background(), target, msg)
 					if err != nil {
 						log.Errorf("Error sending message: %v", err)
