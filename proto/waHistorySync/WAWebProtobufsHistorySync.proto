@@ -49,6 +49,8 @@ message HistorySync {
 	repeated WASyncAction.CallLogRecord callLogRecords = 13;
 	optional BotAIWaitListState aiWaitListState = 14;
 	repeated PhoneNumberToLIDMapping phoneNumberToLidMappings = 15;
+	optional string companionMetaNonce = 16;
+	optional bytes shareableChatIdentifierEncryptionKey = 17;
 }
 
 message Conversation {
