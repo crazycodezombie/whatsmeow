@@ -1,11 +1,11 @@
 module go.mau.fi/whatsmeow/mdtest
 
-go 1.21
+go 1.22.0
 
-toolchain go1.22.0
+toolchain go1.23.1
 
 require (
-	github.com/mattn/go-sqlite3 v1.14.22
+	github.com/mattn/go-sqlite3 v1.14.23
 	github.com/mdp/qrterminal/v3 v3.0.0
 	go.mau.fi/whatsmeow v0.0.0-20230805111647-405414b9b5c0
 	google.golang.org/protobuf v1.34.2
@@ -19,10 +19,10 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
 	go.mau.fi/libsignal v0.1.1 // indirect
-	go.mau.fi/util v0.6.0 // indirect
-	golang.org/x/crypto v0.25.0 // indirect
-	golang.org/x/net v0.27.0 // indirect
-	golang.org/x/sys v0.22.0 // indirect
+	go.mau.fi/util v0.8.0 // indirect
+	golang.org/x/crypto v0.27.0 // indirect
+	golang.org/x/net v0.29.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
 

@@ -19,6 +19,5 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	go.mau.fi/whatsmeow/mdtest v0.0.0-20240809160754-dcc66fc7e472 // indirect
 	golang.org/x/sys v0.25.0 // indirect
 )
