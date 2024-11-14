@@ -38,6 +38,9 @@ func (cli *Client) FetchAppState(name appstate.WAPatchName, fullSync, onlyIfNotS
 }
 
 func (cli *Client) fetchAppStateNoLock(name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
 	var err error
 	//for i := 0; i < fetchAppStateRetries; i++ {
 	err = cli.actualFetchAppStateNoLock(name, fullSync, onlyIfNotSynced)
@@ -542,6 +545,9 @@ func (cli *Client) requestAppStateKeys(ctx context.Context, rawKeyIDs [][]byte) 
 }
 
 func (cli *Client) actualSendAppState(patch appstate.PatchInfo) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
 	version, hash, err := cli.Store.AppState.GetAppStateVersion(string(patch.Type))
 	if err != nil {
 		return err
