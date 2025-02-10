@@ -45,7 +45,7 @@ func (cli *Client) handleEncryptedMessage(node *waBinary.Node) {
 		if len(info.PushName) > 0 && info.PushName != "-" {
 			cli.updatePushName(info.Sender, info, info.PushName)
 		}
-		defer cli.maybeDeferredAck(node)
+		defer cli.maybeDeferredAck(node)()
 		if info.Sender.Server == types.NewsletterServer {
 			cli.handlePlaintextMessage(info, node)
 		} else {
