@@ -16,7 +16,8 @@ import (
 
 	"go.mau.fi/whatsmeow/appstate"
 	waBinary "go.mau.fi/whatsmeow/binary"
-	waProto "go.mau.fi/whatsmeow/binary/proto"
+	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/proto/waServerSync"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -198,7 +199,7 @@ func (cli *Client) filterContacts(mutations []appstate.Mutation, out map[types.J
 			jid, _ := types.ParseJID(mutation.Index[1])
 
 			switch mutation.Operation {
-			case waProto.SyncdMutation_SET:
+			case waServerSync.SyncdMutation_SET:
 				act := mutation.Action.GetContactAction()
 				out[jid] = store.ContactEntry{
 					JID:       jid,
@@ -206,7 +207,7 @@ func (cli *Client) filterContacts(mutations []appstate.Mutation, out map[types.J
 					FullName:  act.GetFullName(),
 					Exists:    true,
 				}
-			case waProto.SyncdMutation_REMOVE:
+			case waServerSync.SyncdMutation_REMOVE:
 				out[jid] = store.ContactEntry{
 					JID:    jid,
 					Exists: false,
@@ -218,7 +219,7 @@ func (cli *Client) filterContacts(mutations []appstate.Mutation, out map[types.J
 
 func (cli *Client) getArchivesInfo(mutations []appstate.Mutation, out map[types.JID]store.ArchivedEntry) {
 	for _, mutation := range mutations {
-		if mutation.Operation != waProto.SyncdMutation_SET {
+		if mutation.Operation != waServerSync.SyncdMutation_SET {
 			continue
 		}
 
@@ -235,7 +236,7 @@ func (cli *Client) getArchivesInfo(mutations []appstate.Mutation, out map[types.
 
 func (cli *Client) getLabelsInfo(mutations []appstate.Mutation, out map[int]store.LabelEditEntry) {
 	for _, mutation := range mutations {
-		if mutation.Operation != waProto.SyncdMutation_SET {
+		if mutation.Operation != waServerSync.SyncdMutation_SET {
 			continue
 		}
 
@@ -258,7 +259,7 @@ func (cli *Client) getLabelsInfo(mutations []appstate.Mutation, out map[int]stor
 
 func (cli *Client) getLabelContactsInfo(mutations []appstate.Mutation, out map[int]map[types.JID]store.LabelContactEntry) {
 	for _, mutation := range mutations {
-		if mutation.Operation != waProto.SyncdMutation_SET {
+		if mutation.Operation != waServerSync.SyncdMutation_SET {
 			continue
 		}
 
@@ -282,7 +283,7 @@ func (cli *Client) getLabelContactsInfo(mutations []appstate.Mutation, out map[i
 func (cli *Client) dispatchAppStateSet(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
 	dispatchEvts := !fullSync || emitOnFullSync
 
-	if mutation.Operation != waProto.SyncdMutation_SET {
+	if mutation.Operation != waServerSync.SyncdMutation_SET {
 		return
 	}
 
@@ -461,9 +462,9 @@ func (cli *Client) dispatchAppStateRemove(mutation appstate.Mutation, fullSync b
 
 func (cli *Client) dispatchAppState(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
 	switch mutation.Operation {
-	case waProto.SyncdMutation_SET:
+	case waServerSync.SyncdMutation_SET:
 		cli.dispatchAppStateSet(mutation, fullSync, emitOnFullSync)
-	case waProto.SyncdMutation_REMOVE:
+	case waServerSync.SyncdMutation_REMOVE:
 		cli.dispatchAppStateRemove(mutation, fullSync, emitOnFullSync)
 	default:
 		cli.Log.Warnf("Got invalid type of mutation operation: %v", mutation.Operation)
@@ -471,7 +472,7 @@ func (cli *Client) dispatchAppState(mutation appstate.Mutation, fullSync bool, e
 	}
 }
 
-func (cli *Client) downloadExternalAppStateBlob(ref *waProto.ExternalBlobReference) ([]byte, error) {
+func (cli *Client) downloadExternalAppStateBlob(ref *waServerSync.ExternalBlobReference) ([]byte, error) {
 	return cli.Download(ref)
 }
 
@@ -519,16 +520,16 @@ func (cli *Client) requestMissingAppStateKeys(ctx context.Context, patches *apps
 }
 
 func (cli *Client) requestAppStateKeys(ctx context.Context, rawKeyIDs [][]byte) {
-	keyIDs := make([]*waProto.AppStateSyncKeyId, len(rawKeyIDs))
+	keyIDs := make([]*waE2E.AppStateSyncKeyId, len(rawKeyIDs))
 	debugKeyIDs := make([]string, len(rawKeyIDs))
 	for i, keyID := range rawKeyIDs {
-		keyIDs[i] = &waProto.AppStateSyncKeyId{KeyID: keyID}
+		keyIDs[i] = &waE2E.AppStateSyncKeyId{KeyID: keyID}
 		debugKeyIDs[i] = hex.EncodeToString(keyID)
 	}
-	msg := &waProto.Message{
-		ProtocolMessage: &waProto.ProtocolMessage{
-			Type: waProto.ProtocolMessage_APP_STATE_SYNC_KEY_REQUEST.Enum(),
-			AppStateSyncKeyRequest: &waProto.AppStateSyncKeyRequest{
+	msg := &waE2E.Message{
+		ProtocolMessage: &waE2E.ProtocolMessage{
+			Type: waE2E.ProtocolMessage_APP_STATE_SYNC_KEY_REQUEST.Enum(),
+			AppStateSyncKeyRequest: &waE2E.AppStateSyncKeyRequest{
 				KeyIDs: keyIDs,
 			},
 		},
