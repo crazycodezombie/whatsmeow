@@ -49,7 +49,7 @@ type wrappedEventHandler struct {
 
 type HistNotificationData struct {
 	Info *types.MessageInfo
-	Msg  *waProto.Message
+	Msg  *waE2E.Message
 }
 
 type deviceCache struct {
@@ -240,9 +240,9 @@ func NewClient(deviceStore *store.Device, log waLog.Logger, validateMACs bool) *
 
 		pendingPhoneRerequests: make(map[types.MessageID]context.CancelFunc),
 
-		EnableAutoReconnect:   true,
-		AutoTrustIdentity:     true,
-		validateMACs:          validateMACs,
+		EnableAutoReconnect: true,
+		AutoTrustIdentity:   true,
+		validateMACs:        validateMACs,
 
 		gotKeys:                  false,
 		waitingHistNotifications: make([]HistNotificationData, 0),

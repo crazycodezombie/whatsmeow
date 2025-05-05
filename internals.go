@@ -43,8 +43,8 @@ func (cli *Client) DangerousInternals() *DangerousInternalClient {
 type DangerousInfoQuery = infoQuery
 type DangerousInfoQueryType = infoQueryType
 
-func (int *DangerousInternalClient) FilterContacts(mutations []appstate.Mutation) ([]appstate.Mutation, []store.ContactEntry) {
-	return int.c.filterContacts(mutations)
+func (int *DangerousInternalClient) FilterContacts(mutations []appstate.Mutation, out map[types.JID]store.ContactEntry) {
+	int.c.filterContacts(mutations, out)
 }
 
 func (int *DangerousInternalClient) DispatchAppState(mutation appstate.Mutation, fullSync bool, emitOnFullSync bool) {
@@ -289,10 +289,6 @@ func (int *DangerousInternalClient) DecryptGroupMsg(child *waBinary.Node, from t
 
 func (int *DangerousInternalClient) HandleSenderKeyDistributionMessage(chat, from types.JID, axolotlSKDM []byte) {
 	int.c.handleSenderKeyDistributionMessage(chat, from, axolotlSKDM)
-}
-
-func (int *DangerousInternalClient) HandleHistorySyncNotificationLoop() {
-	int.c.handleHistorySyncNotificationLoop()
 }
 
 func (int *DangerousInternalClient) HandleHistorySyncNotification(notif *waE2E.HistorySyncNotification) {
